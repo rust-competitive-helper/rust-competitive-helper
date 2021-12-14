@@ -1,0 +1,10 @@
+[package]
+name = "$TASK"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+algo_lib = {path = "../algo_lib"}
+
+[build-dependencies]
+util = {path = "../util"}
