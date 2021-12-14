@@ -16,7 +16,7 @@ fn contest_name(group: &String) -> String {
 }
 
 fn contest_list() -> Vec<(String, Vec<String>)> {
-    let lines = crate::util::read_lines("../Cargo.toml");
+    let lines = crate::util::read_lines("Cargo.toml");
     let mut result = BTreeMap::new();
     for line in lines {
         if !line.starts_with("    ") {
@@ -26,7 +26,7 @@ fn contest_list() -> Vec<(String, Vec<String>)> {
         let task_name =
             String::from_utf8_lossy(&(line[1..line.len() - 2].iter().cloned().collect::<Vec<_>>()))
                 .to_string();
-        let main = fs::File::open(format!("../{}/src/main.rs", task_name));
+        let main = fs::File::open(format!("{}/src/main.rs", task_name));
         if main.is_err() {
             continue;
         }
@@ -70,12 +70,12 @@ fn ask_archive(task_name: String) {
     }
     if selection >= 2 {
         let now = Utc::now();
-        let mut main = crate::util::read_lines(format!("../{}/src/main.rs", task_name));
+        let mut main = crate::util::read_lines(format!("{}/src/main.rs", task_name));
         let task =
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
         let path = format!(
-            "../archive/{}/{}/{}.{}.{} - {}",
+            "archive/{}/{}/{}.{}.{} - {}",
             now.year(),
             now.month(),
             now.day(),
@@ -87,7 +87,7 @@ fn ask_archive(task_name: String) {
         fs::create_dir_all(path.clone()).unwrap();
         crate::util::write_lines(format!("{}/{}.rs", path, task_name), main.clone());
         if selection == 3 {
-            let tester = crate::util::read_lines(format!("../{}/src/tester.rs", task_name));
+            let tester = crate::util::read_lines(format!("{}/src/tester.rs", task_name));
             main.push("mod tester {".to_string());
             main.extend_from_slice(tester.as_slice());
             main.push("}".to_string());
@@ -117,18 +117,18 @@ fn ask_archive(task_name: String) {
             test_lines.push(format!("fn {}() {{", task_name));
             test_lines.push("    assert!(tester::run_tests());".to_string());
             test_lines.push("}".to_string());
-            crate::util::write_lines(format!("../algo_lib/tests/{}.rs", task_name), test_lines);
-            let from = format!("../{}/tests", task_name);
-            std::fs::rename(from, format!("../algo_lib/tests/{}", task_name)).unwrap();
+            crate::util::write_lines(format!("algo_lib/tests/{}.rs", task_name), test_lines);
+            let from = format!("{}/tests", task_name);
+            std::fs::rename(from, format!("algo_lib/tests/{}", task_name)).unwrap();
         }
     }
-    std::fs::remove_dir_all(format!("../{}/", task_name)).unwrap();
+    std::fs::remove_dir_all(format!("{}/", task_name)).unwrap();
 
-    let lines = crate::util::read_lines("../Cargo.toml")
+    let lines = crate::util::read_lines("Cargo.toml")
         .into_iter()
         .filter(|line| line != &format!("    \"{}\",", task_name))
         .collect_vec();
-    crate::util::write_lines("../Cargo.toml", lines);
+    crate::util::write_lines("Cargo.toml", lines);
 }
 
 pub fn archive() {
