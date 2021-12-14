@@ -74,7 +74,7 @@ pub fn get_invoke(task: &Task) -> String {
 pub fn create(task: Task) {
     let name = task_name(&task);
     let mut lines = Vec::new();
-    for l in read_lines("../Cargo.toml") {
+    for l in read_lines("Cargo.toml") {
         if l.contains(format!("\"{}\"", name).as_str()) {
             eprintln!("Task {} exists", name);
             return;
@@ -84,15 +84,15 @@ pub fn create(task: Task) {
             lines.push(format!("    \"{}\",", name));
         }
     }
-    write_lines("../Cargo.toml", lines);
-    fs::create_dir_all(format!("../{}/src", name)).unwrap();
-    fs::create_dir_all(format!("../{}/tests", name)).unwrap();
+    write_lines("Cargo.toml", lines);
+    fs::create_dir_all(format!("{}/src", name)).unwrap();
+    fs::create_dir_all(format!("{}/tests", name)).unwrap();
     for (i, test) in task.tests.iter().enumerate() {
-        write_to_file(format!("../{}/tests/{}.in", name, i + 1), &test.input);
-        write_to_file(format!("../{}/tests/{}.out", name, i + 1), &test.output);
+        write_to_file(format!("{}/tests/{}.in", name, i + 1), &test.input);
+        write_to_file(format!("{}/tests/{}.out", name, i + 1), &test.output);
     }
     write_to_file(
-        format!("../{}/build.rs", name),
+        format!("{}/build.rs", name),
         read_from_file("templates/build.rs"),
     );
     let mut solve = get_solve(&task);
@@ -117,15 +117,16 @@ pub fn create(task: Task) {
         }
     };
     main = main.replace("$CARET", "");
-    write_to_file(format!("../{}/src/main.rs", name), main);
+    write_to_file(format!("{}/src/main.rs", name), main);
     let mut tester = read_from_file("templates/tester.rs");
     tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
     tester = tester.replace("$TASK", name.as_str());
-    write_to_file(format!("../{}/src/tester.rs", name), tester);
+    write_to_file(format!("{}/src/tester.rs", name), tester);
     let mut toml = read_from_file("templates/Cargo.toml");
     toml = toml.replace("$TASK", name.as_str());
-    write_to_file(format!("../{}/Cargo.toml", name).as_str(), toml);
+    write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
     println!("Task {} parsed", name);
+    // TODO: should be a different path to CLion for windows?
     #[cfg(windows)]
     match Command::new("..\\..\\clion.cmd")
         .args([
@@ -133,7 +134,7 @@ pub fn create(task: Task) {
             row.to_string().as_str(),
             "--column",
             col.to_string().as_str(),
-            format!("../{}/src/main.rs", name).as_str(),
+            format!("{}/src/main.rs", name).as_str(),
         ])
         .output()
     {
@@ -150,7 +151,7 @@ pub fn create(task: Task) {
                 row.to_string().as_str(),
                 "--column",
                 col.to_string().as_str(),
-                format!("../{}/src/main.rs", name).as_str(),
+                format!("{}/src/main.rs", name).as_str(),
             ])
             .output()
         {
