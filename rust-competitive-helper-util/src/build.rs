@@ -1,4 +1,4 @@
-use crate::util::{read_lines, IOEnum, Task};
+use crate::{read_lines, IOEnum, Task};
 use std::collections::HashSet;
 use std::io::Write;
 
