@@ -126,7 +126,6 @@ pub fn create(task: Task) {
     toml = toml.replace("$TASK", name.as_str());
     write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
     println!("Task {} parsed", name);
-    // TODO: should be a different path to CLion for windows?
     #[cfg(windows)]
     match Command::new("..\\..\\clion.cmd")
         .args([
@@ -205,7 +204,7 @@ fn select_input_type() -> IOType {
             IOEnum::File,
             Some(
                 Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Num sample tests:")
+                    .with_prompt("Input file name:")
                     .interact_on(&Term::stdout())
                     .unwrap(),
             ),
@@ -234,7 +233,7 @@ fn select_output_type() -> IOType {
             IOEnum::File,
             Some(
                 Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Num sample tests:")
+                    .with_prompt("Output file name:")
                     .interact_on(&Term::stdout())
                     .unwrap(),
             ),
