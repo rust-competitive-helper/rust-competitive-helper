@@ -1,5 +1,5 @@
 [package]
-name = "rust-competitive-helper"
+name = "rust_competitive_helper"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,7 +13,7 @@ serde_json = "~1.0"
 dialoguer = "~0.9"
 chrono = "~0.4"
 itertools = "~0.10"
-rust-competitive-helper-util = {path = "rust-competitive-helper-util"}
+rust_competitive_helper_util = {path = "rust-competitive-helper-util"}
 
 [workspace]
 members = [
