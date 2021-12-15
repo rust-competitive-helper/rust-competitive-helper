@@ -99,7 +99,7 @@ fn all_files_impl(usages: &Vec<UsageTree>, prefix: String, root: bool) -> Vec<St
 }
 
 fn all_files(usage_tree: &UsageTree) -> Vec<String> {
-    all_files_impl(&usage_tree.children, "../algo_lib/src/".to_string(), true)
+    all_files_impl(&usage_tree.children, "../algo_lib/src".to_string(), true)
 }
 
 fn all_usages_impl(usages: &Vec<UsageTree>, prefix: String) -> Vec<String> {
