@@ -1,5 +1,5 @@
 use crate::task_creator;
-use crate::util::Task;
+use rust_competitive_helper_util::Task;
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
 
