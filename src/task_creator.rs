@@ -1,4 +1,4 @@
-use crate::util::{
+use rust_competitive_helper_util::{
     read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Languages, Task,
     TaskClass, Test, TestType,
 };
@@ -127,7 +127,7 @@ pub fn create(task: Task) {
     write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
     println!("Task {} parsed", name);
     #[cfg(windows)]
-    match Command::new("..\\..\\clion.cmd")
+    match Command::new("..\\clion.cmd")
         .args([
             "--line",
             row.to_string().as_str(),
