@@ -184,14 +184,22 @@ pub fn build() {
     match task.input.io_type {
         IOEnum::StdIn | IOEnum::Regex => {
             code.push("    let mut sin = std::io::stdin();".to_string());
-            code.push("    let input = Input::new(&mut sin);".to_string());
+            if task.interactive {
+                code.push("    let input = Input::new_with_size(&mut sin, 1);".to_string());
+            } else {
+                code.push("    let input = Input::new(&mut sin);".to_string());
+            }
         }
         IOEnum::File => {
             code.push(format!(
                 "    let mut in_file = std::fs::File::open(\"{}\").unwrap();",
                 task.input.file_name.unwrap()
             ));
-            code.push("    let input = Input::new(&mut in_file);".to_string())
+            if task.interactive {
+                code.push("    let input = Input::new_with_size(&mut in_file, 1);".to_string());
+            } else {
+                code.push("    let input = Input::new(&mut in_file);".to_string());
+            }
         }
         _ => {
             unreachable!()
@@ -200,9 +208,15 @@ pub fn build() {
     match task.output.io_type {
         IOEnum::StdOut => {
             code.push("    unsafe {".to_string());
-            code.push(format!(
-                "        OUTPUT = Some(Output::new(Box::new(std::io::stdout())));"
-            ));
+            if task.interactive {
+                code.push(format!(
+                    "        OUTPUT = Some(Output::new_with_auto_flush(Box::new(std::io::stdout())));"
+                ));
+            } else {
+                code.push(format!(
+                    "        OUTPUT = Some(Output::new(Box::new(std::io::stdout())));"
+                ));
+            }
             code.push("    }".to_string());
         }
         IOEnum::File => {
@@ -211,9 +225,15 @@ pub fn build() {
                 task.output.file_name.unwrap()
             ));
             code.push("    unsafe {".to_string());
-            code.push(format!(
-                "        OUTPUT = Some(Output::new(Box::new(out_file)));"
-            ));
+            if task.interactive {
+                code.push(format!(
+                    "        OUTPUT = Some(Output::new_with_auto_flush(Box::new(out_file)));"
+                ));
+            } else {
+                code.push(format!(
+                    "        OUTPUT = Some(Output::new(Box::new(out_file)));"
+                ));
+            }
             code.push("    }".to_string());
         }
         _ => {
