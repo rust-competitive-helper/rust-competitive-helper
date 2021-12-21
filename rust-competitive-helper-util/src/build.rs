@@ -2,11 +2,13 @@ use crate::{read_lines, IOEnum, Task};
 use std::collections::HashSet;
 use std::io::Write;
 
+#[derive(Debug)]
 struct UsageTree {
     tag: String,
     children: Vec<UsageTree>,
 }
 
+#[derive(Debug)]
 enum BuildResult {
     Usage(UsageTree),
     Children(Vec<UsageTree>),
@@ -35,18 +37,22 @@ fn build_use_tree(usage: &str) -> BuildResult {
                 start = i + 1;
             }
         }
-        match build_use_tree(
-            usage[start..usage.len() - 1usize]
+        {
+            let children = usage[start..usage.len() - 1usize]
                 .iter()
                 .cloned()
-                .collect::<String>()
-                .as_str(),
-        ) {
-            BuildResult::Usage(usage) => {
-                res.push(usage);
-            }
-            BuildResult::Children(_) => {
-                unreachable!()
+                .collect::<String>();
+            if children.trim().is_empty() {
+                // allow trailing comma (e.g. in multiline use statement)
+            } else {
+                match build_use_tree(&children) {
+                    BuildResult::Usage(usage) => {
+                        res.push(usage);
+                    }
+                    BuildResult::Children(_) => {
+                        unreachable!()
+                    }
+                }
             }
         }
         BuildResult::Children(res)
@@ -75,6 +81,44 @@ fn build_use_tree(usage: &str) -> BuildResult {
                 })
             }
         }
+    }
+}
+
+fn build_use_tree_full_line(line: &str) -> BuildResult {
+    assert!(line.starts_with("use "));
+    assert!(line.ends_with(";"));
+    build_use_tree(&line[4..(line.len() - 1)])
+}
+
+#[cfg(test)]
+mod build_use_tree_tests {
+    use crate::build::build_use_tree_full_line;
+    use expect_test::expect;
+
+    #[test]
+    fn multiline_use() {
+        let line = "use algo_lib::graph::strongly_connected_components::{find_order, find_strongly_connected_component,};";
+        let expected = expect![[
+            r#"Usage(UsageTree { tag: "algo_lib", children: [UsageTree { tag: "graph", children: [UsageTree { tag: "strongly_connected_components", children: [UsageTree { tag: "find_order", children: [] }, UsageTree { tag: "find_strongly_connected_component", children: [] }] }] }] })"#
+        ]];
+        expected.assert_eq(&format!("{:?}", build_use_tree_full_line(line)));
+    }
+
+    #[test]
+    fn random_nested_struct() {
+        let line =
+            "use algo_lib::{graph::{compressed_graph, edges},io::{input::Input, output},misc,};";
+        let expected = expect![[
+            r#"Usage(UsageTree { tag: "algo_lib", children: [UsageTree { tag: "graph", children: [UsageTree { tag: "compressed_graph", children: [] }, UsageTree { tag: "edges", children: [] }] }, UsageTree { tag: "io", children: [UsageTree { tag: "input", children: [UsageTree { tag: "Input", children: [] }] }, UsageTree { tag: "output", children: [] }] }, UsageTree { tag: "misc", children: [] }] })"#
+        ]];
+        expected.assert_eq(&format!("{:?}", build_use_tree_full_line(line)));
+    }
+
+    #[test]
+    fn simple() {
+        let line = "use std::collections::HashSet;";
+        let expected = expect![[r#"Usage(UsageTree { tag: "std", children: [UsageTree { tag: "collections", children: [UsageTree { tag: "HashSet", children: [] }] }] })"#]];
+        expected.assert_eq(&format!("{:?}", build_use_tree_full_line(line)));
     }
 }
 
@@ -136,10 +180,15 @@ fn find_usages_and_code(
         let task_json = lines.next().unwrap().chars().skip(2).collect::<String>();
         task = Some(serde_json::from_str::<Task>(task_json.as_str()).unwrap());
     }
-    for line in lines {
-        let line = line;
+    while let Some(mut line) = lines.next() {
         if line.starts_with("use") {
-            match build_use_tree(&line[4..(line.len() - 1)]) {
+            while !line.ends_with(";") {
+                let next_line = lines
+                    .next()
+                    .expect("expect ; in the end of `use` line, end of file found");
+                line += next_line.trim();
+            }
+            match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag.as_str() == prefix {
                         let all = all_files(&usage);
