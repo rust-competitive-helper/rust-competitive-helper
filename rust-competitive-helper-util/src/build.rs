@@ -164,12 +164,18 @@ fn all_files(usage_tree: &UsageTree) -> Vec<(String, Vec<String>)> {
     )
 }
 
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+struct CodeFile {
+    fqn: Vec<String>,
+    content: Vec<String>,
+}
+
 fn find_usages_and_code(
     file: &str,
     prefix: &str,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
-) -> (Vec<(Vec<String>, Vec<String>)>, Option<Task>) {
+) -> (Vec<CodeFile>, Option<Task>) {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
     let mut main = false;
@@ -227,18 +233,17 @@ fn find_usages_and_code(
         }
     }
 
-    all_code.push((code, fqn_path));
+    all_code.push(CodeFile {
+        content: code,
+        fqn: fqn_path,
+    });
 
     (all_code, task)
 }
 
-fn build_code(
-    mut prefix: Vec<String>,
-    mut to_add: &mut [(Vec<String>, Vec<String>)],
-    code: &mut Vec<String>,
-) {
-    if to_add[0].1 == prefix {
-        code.append(&mut to_add[0].0);
+fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut Vec<String>) {
+    if to_add[0].fqn == prefix {
+        code.append(&mut to_add[0].content);
         to_add = &mut to_add[1..];
     }
     if to_add.is_empty() {
@@ -248,9 +253,9 @@ fn build_code(
     loop {
         let mut found = false;
         for i in 1..to_add.len() {
-            if to_add[i].1[index] != to_add[i - 1].1[index] {
+            if to_add[i].fqn[index] != to_add[i - 1].fqn[index] {
                 let mut prefix = prefix.clone();
-                let mod_name = to_add[i - 1].1[index].clone();
+                let mod_name = to_add[i - 1].fqn[index].clone();
                 prefix.push(mod_name.clone());
                 code.push(format!("pub mod {} {{", mod_name));
                 build_code(prefix, &mut to_add[..i], code);
@@ -261,7 +266,7 @@ fn build_code(
             }
         }
         if !found {
-            let mod_name = to_add[0].1[index].clone();
+            let mod_name = to_add[0].fqn[index].clone();
             prefix.push(mod_name.clone());
             code.push(format!("pub mod {} {{", mod_name));
             build_code(prefix, to_add, code);
@@ -275,7 +280,7 @@ pub fn build() {
     let (mut all_code, task) =
         find_usages_and_code("src/main.rs", LIB_NAME, Vec::new(), &mut HashSet::new());
     let mut code = Vec::new();
-    all_code.sort_by(|f1, f2| f1.1.cmp(&f2.1));
+    all_code.sort();
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
     code.push("fn main() {".to_string());
     let task = task.unwrap();
