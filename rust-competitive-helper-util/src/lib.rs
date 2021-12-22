@@ -104,16 +104,16 @@ where
     res
 }
 
-pub fn write_to_file<'a, P: AsRef<Path>, C: Into<String>>(filename: P, content: C) {
+pub fn write_to_file<P: AsRef<Path>, C: Into<String>>(filename: P, content: C) {
     fs::write(filename, content.into()).unwrap();
 }
 
-pub fn write_lines<'a, P: AsRef<Path>, C: Into<String>>(filename: P, lines: Vec<C>) {
+pub fn write_lines<P: AsRef<Path>, C: Into<String>>(filename: P, lines: Vec<C>) {
     let mut file = File::create(filename).unwrap();
     for line in lines {
         // TODO: as_ref?
-        file.write(line.into().as_ref()).unwrap();
-        file.write("\n".as_bytes()).unwrap();
+        file.write_all(line.into().as_ref()).unwrap();
+        file.write_all("\n".as_bytes()).unwrap();
     }
     file.flush().unwrap();
 }

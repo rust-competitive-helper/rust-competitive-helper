@@ -1,6 +1,7 @@
 use crate::{read_lines, IOEnum, Task};
 use std::collections::HashSet;
-use std::io::Write;
+
+const LIB_NAME: &'static str = "algo_lib";
 
 #[derive(Debug)]
 struct UsageTree {
@@ -117,71 +118,82 @@ mod build_use_tree_tests {
     #[test]
     fn simple() {
         let line = "use std::collections::HashSet;";
-        let expected = expect![[r#"Usage(UsageTree { tag: "std", children: [UsageTree { tag: "collections", children: [UsageTree { tag: "HashSet", children: [] }] }] })"#]];
+        let expected = expect![[
+            r#"Usage(UsageTree { tag: "std", children: [UsageTree { tag: "collections", children: [UsageTree { tag: "HashSet", children: [] }] }] })"#
+        ]];
         expected.assert_eq(&format!("{:?}", build_use_tree_full_line(line)));
     }
 }
 
-fn all_files_impl(usages: &Vec<UsageTree>, prefix: String, root: bool) -> Vec<String> {
+/// Returns file names and fqn paths
+fn all_files_impl(
+    usages: &Vec<UsageTree>,
+    prefix: String,
+    fqn_path: Vec<String>,
+    root: bool,
+) -> Vec<(String, Vec<String>)> {
     let mut res = Vec::new();
     let mut add = false;
     for usage in usages.iter() {
         if usage.children.is_empty() {
             add = true;
         } else {
+            let mut fqn_path = fqn_path.clone();
+            fqn_path.push(usage.tag.clone());
             res.append(&mut all_files_impl(
                 &usage.children,
                 format!("{}/{}", prefix, usage.tag),
+                fqn_path,
                 false,
             ));
         }
     }
     if add && !root {
-        res.push(prefix + ".rs");
+        res.push((prefix + ".rs", fqn_path.clone()));
     }
     res
 }
 
-fn all_files(usage_tree: &UsageTree) -> Vec<String> {
-    all_files_impl(&usage_tree.children, "../algo_lib/src".to_string(), true)
-}
-
-fn all_usages_impl(usages: &Vec<UsageTree>, prefix: String) -> Vec<String> {
-    let mut res = Vec::new();
-    for usage in usages.iter() {
-        if usage.children.is_empty() {
-            res.push(format!("{}::{};", prefix, usage.tag));
-        } else {
-            res.append(&mut all_usages_impl(
-                &usage.children,
-                format!("{}::{}", prefix, usage.tag),
-            ));
-        }
-    }
-    res
-}
-
-fn all_usages(usage_tree: &UsageTree) -> Vec<String> {
-    all_usages_impl(&usage_tree.children, format!("use {}", usage_tree.tag))
+/// Returns file names and fqn paths
+fn all_files(usage_tree: &UsageTree) -> Vec<(String, Vec<String>)> {
+    all_files_impl(
+        &usage_tree.children,
+        format!("../{}/src", LIB_NAME),
+        Vec::new(),
+        true,
+    )
 }
 
 fn find_usages_and_code(
     file: &str,
     prefix: &str,
+    fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
-) -> (HashSet<String>, Vec<String>, Option<Task>) {
-    let mut usages = HashSet::new();
+) -> (Vec<(Vec<String>, Vec<String>)>, Option<Task>) {
     let mut code = Vec::new();
+    let mut all_code = Vec::new();
     let mut main = false;
     let mut task = None;
 
     let mut lines = read_lines(file).into_iter();
-    if prefix == "algo_lib" {
+    if prefix == LIB_NAME {
         let task_json = lines.next().unwrap().chars().skip(2).collect::<String>();
         task = Some(serde_json::from_str::<Task>(task_json.as_str()).unwrap());
     }
     while let Some(mut line) = lines.next() {
+        if line.as_str() == "//START MAIN" {
+            main = true;
+            continue;
+        }
+        if line.as_str() == "//END MAIN" {
+            main = false;
+            continue;
+        }
+        if main {
+            continue;
+        }
         if line.starts_with("use") {
+            code.push(line.replace(LIB_NAME, "crate"));
             while !line.ends_with(";") {
                 let next_line = lines
                     .next()
@@ -192,17 +204,18 @@ fn find_usages_and_code(
                 BuildResult::Usage(usage) => {
                     if usage.tag.as_str() == prefix {
                         let all = all_files(&usage);
-                        for file in all {
+                        for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
-                                let (call_usages, mut call_code, ..) =
-                                    find_usages_and_code(file.as_str(), "crate", processed);
-                                usages.extend(call_usages);
-                                code.append(&mut call_code);
+                                let (call_code, ..) = find_usages_and_code(
+                                    file.as_str(),
+                                    "crate",
+                                    fqn_path,
+                                    processed,
+                                );
+                                all_code.extend(call_code);
                             }
                         }
-                    } else {
-                        usages.extend(all_usages(&usage));
                     }
                 }
                 BuildResult::Children(_) => {
@@ -210,33 +223,72 @@ fn find_usages_and_code(
                 }
             }
         } else {
-            if line.as_str() == "//START MAIN" {
-                main = true;
-            }
-            if !main {
-                code.push(line.clone());
-            }
-            if line.as_str() == "//END MAIN" {
-                main = false;
-            }
+            code.push(line.clone());
         }
     }
 
-    (usages, code, task)
+    all_code.push((code, fqn_path));
+
+    (all_code, task)
+}
+
+fn build_code(
+    mut prefix: Vec<String>,
+    mut to_add: &mut [(Vec<String>, Vec<String>)],
+    code: &mut Vec<String>,
+) {
+    if to_add[0].1 == prefix {
+        code.append(&mut to_add[0].0);
+        to_add = &mut to_add[1..];
+    }
+    if to_add.is_empty() {
+        return;
+    }
+    let index = prefix.len();
+    loop {
+        let mut found = false;
+        for i in 1..to_add.len() {
+            if to_add[i].1[index] != to_add[i - 1].1[index] {
+                let mut prefix = prefix.clone();
+                let mod_name = to_add[i - 1].1[index].clone();
+                prefix.push(mod_name.clone());
+                code.push(format!("pub mod {} {{", mod_name));
+                build_code(prefix, &mut to_add[..i], code);
+                code.push("}".to_string());
+                found = true;
+                to_add = &mut to_add[i..];
+                break;
+            }
+        }
+        if !found {
+            let mod_name = to_add[0].1[index].clone();
+            prefix.push(mod_name.clone());
+            code.push(format!("pub mod {} {{", mod_name));
+            build_code(prefix, to_add, code);
+            code.push("}".to_string());
+            return;
+        }
+    }
 }
 
 pub fn build() {
-    let (usages, mut code, task) =
-        find_usages_and_code("src/main.rs", "algo_lib", &mut HashSet::new());
+    let (mut all_code, task) =
+        find_usages_and_code("src/main.rs", LIB_NAME, Vec::new(), &mut HashSet::new());
+    let mut code = Vec::new();
+    all_code.sort_by(|f1, f2| f1.1.cmp(&f2.1));
+    build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
     code.push("fn main() {".to_string());
     let task = task.unwrap();
     match task.input.io_type {
         IOEnum::StdIn | IOEnum::Regex => {
             code.push("    let mut sin = std::io::stdin();".to_string());
             if task.interactive {
-                code.push("    let input = Input::new_with_size(&mut sin, 1);".to_string());
+                code.push(
+                    "    let input = crate::io::input::Input::new_with_size(&mut sin, 1);"
+                        .to_string(),
+                );
             } else {
-                code.push("    let input = Input::new(&mut sin);".to_string());
+                code.push("    let input = crate::io::input::Input::new(&mut sin);".to_string());
             }
         }
         IOEnum::File => {
@@ -245,9 +297,14 @@ pub fn build() {
                 task.input.file_name.unwrap()
             ));
             if task.interactive {
-                code.push("    let input = Input::new_with_size(&mut in_file, 1);".to_string());
+                code.push(
+                    "    let input = crate::io::input::Input::new_with_size(&mut in_file, 1);"
+                        .to_string(),
+                );
             } else {
-                code.push("    let input = Input::new(&mut in_file);".to_string());
+                code.push(
+                    "    let input = crate::io::input::Input::new(&mut in_file);".to_string(),
+                );
             }
         }
         _ => {
@@ -259,11 +316,11 @@ pub fn build() {
             code.push("    unsafe {".to_string());
             if task.interactive {
                 code.push(format!(
-                    "        OUTPUT = Some(Output::new_with_auto_flush(Box::new(std::io::stdout())));"
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(std::io::stdout())));"
                 ));
             } else {
                 code.push(format!(
-                    "        OUTPUT = Some(Output::new(Box::new(std::io::stdout())));"
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(std::io::stdout())));"
                 ));
             }
             code.push("    }".to_string());
@@ -276,11 +333,11 @@ pub fn build() {
             code.push("    unsafe {".to_string());
             if task.interactive {
                 code.push(format!(
-                    "        OUTPUT = Some(Output::new_with_auto_flush(Box::new(out_file)));"
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(out_file)));"
                 ));
             } else {
                 code.push(format!(
-                    "        OUTPUT = Some(Output::new(Box::new(out_file)));"
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(out_file)));"
                 ));
             }
             code.push("    }".to_string());
@@ -291,14 +348,5 @@ pub fn build() {
     }
     code.push("    run(input);".to_string());
     code.push("}".to_string());
-    let mut out = std::fs::File::create("../main/src/main.rs").unwrap();
-    for usage in usages {
-        out.write(usage.as_bytes()).unwrap();
-        out.write("\n".as_bytes()).unwrap();
-    }
-    for line in code {
-        out.write(line.as_bytes()).unwrap();
-        out.write("\n".as_bytes()).unwrap();
-    }
-    out.flush().unwrap();
+    crate::write_lines("../main/src/main.rs", code);
 }
