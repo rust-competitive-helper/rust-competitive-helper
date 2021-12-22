@@ -10,7 +10,7 @@ fn handle(mut stream: TcpStream) {
     if request.is_empty() {
         return;
     }
-    let pos = request.find("{");
+    let pos = request.find('{');
     match pos {
         None => {
             println!("Bad request: {}", request);

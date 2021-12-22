@@ -96,7 +96,7 @@ pub fn read_lines<P>(filename: P) -> Vec<String>
 where
     P: AsRef<Path> + Display,
 {
-    let file = File::open(&filename).expect(&format!("Can't read file: '{}'", filename));
+    let file = File::open(&filename).unwrap_or_else(|_| panic!("Can't read file: '{}'", filename));
     let mut res = Vec::new();
     for line in io::BufReader::new(file).lines() {
         res.push(line.unwrap());

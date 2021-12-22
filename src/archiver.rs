@@ -1,16 +1,16 @@
-use rust_competitive_helper_util::Task;
 use chrono::{Datelike, Utc};
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 use itertools::Itertools;
+use rust_competitive_helper_util::Task;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 
-fn contest_name(group: &String) -> String {
-    match group.find("-") {
-        None => group.clone(),
+fn contest_name(group: &str) -> String {
+    match group.find('-') {
+        None => group.to_string(),
         Some(at) => group.split_at(at + 1).1.trim().to_string(),
     }
 }
@@ -23,9 +23,7 @@ fn contest_list() -> Vec<(String, Vec<String>)> {
             continue;
         }
         let line = line.trim().as_bytes();
-        let task_name =
-            String::from_utf8_lossy(&(line[1..line.len() - 2].iter().cloned().collect::<Vec<_>>()))
-                .to_string();
+        let task_name = String::from_utf8_lossy(&(line[1..line.len() - 2].to_vec())).to_string();
         let main = fs::File::open(format!("{}/src/main.rs", task_name));
         if main.is_err() {
             continue;
@@ -41,21 +39,18 @@ fn contest_list() -> Vec<(String, Vec<String>)> {
             continue;
         }
         let json = first_line.chars().skip(2).collect::<String>();
-        match serde_json::from_str::<Task>(json.as_str()) {
-            Ok(task) => {
-                let contest_name = contest_name(&task.group);
-                if !result.contains_key(&contest_name) {
-                    result.insert(contest_name.clone(), Vec::new());
-                }
-                result.get_mut(&contest_name).unwrap().push(task_name);
+        if let Ok(task) = serde_json::from_str::<Task>(json.as_str()) {
+            let contest_name = contest_name(&task.group);
+            if !result.contains_key(&contest_name) {
+                result.insert(contest_name.clone(), Vec::new());
             }
-            Err(_) => {}
+            result.get_mut(&contest_name).unwrap().push(task_name);
         }
     }
     result.into_iter().collect()
 }
 
-const OPTIONS: [&'static str; 4] = ["Skip", "Delete", "Archive only", "Archive and tests"];
+const OPTIONS: [&str; 4] = ["Skip", "Delete", "Archive only", "Archive and tests"];
 
 fn ask_archive(task_name: String) {
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -70,7 +65,8 @@ fn ask_archive(task_name: String) {
     }
     if selection >= 2 {
         let now = Utc::now();
-        let mut main = rust_competitive_helper_util::read_lines(format!("{}/src/main.rs", task_name));
+        let mut main =
+            rust_competitive_helper_util::read_lines(format!("{}/src/main.rs", task_name));
         let task =
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
@@ -83,11 +79,15 @@ fn ask_archive(task_name: String) {
             now.year(),
             contest_name(&task.group),
         );
-        let path = path.replace(":", "_");
+        let path = path.replace(':', "_");
         fs::create_dir_all(path.clone()).unwrap();
-        rust_competitive_helper_util::write_lines(format!("{}/{}.rs", path, task_name), main.clone());
+        rust_competitive_helper_util::write_lines(
+            format!("{}/{}.rs", path, task_name),
+            main.clone(),
+        );
         if selection == 3 {
-            let tester = rust_competitive_helper_util::read_lines(format!("{}/src/tester.rs", task_name));
+            let tester =
+                rust_competitive_helper_util::read_lines(format!("{}/src/tester.rs", task_name));
             main.push("mod tester {".to_string());
             main.extend_from_slice(tester.as_slice());
             main.push("}".to_string());
@@ -103,13 +103,13 @@ fn ask_archive(task_name: String) {
                         task_name,
                     );
                 }
-                if line == "//START MAIN".to_string() {
+                if line == *"//START MAIN" {
                     in_main = true;
                 }
                 if !in_main {
                     test_lines.push(line.clone());
                 }
-                if line == "//END MAIN".to_string() {
+                if line == *"//END MAIN" {
                     in_main = false;
                 }
             }
@@ -117,7 +117,10 @@ fn ask_archive(task_name: String) {
             test_lines.push(format!("fn {}() {{", task_name));
             test_lines.push("    assert!(tester::run_tests());".to_string());
             test_lines.push("}".to_string());
-            rust_competitive_helper_util::write_lines(format!("algo_lib/tests/{}.rs", task_name), test_lines);
+            rust_competitive_helper_util::write_lines(
+                format!("algo_lib/tests/{}.rs", task_name),
+                test_lines,
+            );
             let from = format!("{}/tests", task_name);
             std::fs::rename(from, format!("algo_lib/tests/{}", task_name)).unwrap();
         }

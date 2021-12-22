@@ -3,7 +3,7 @@ use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 
-const OPTIONS: [&'static str; 4] = ["Run listener", "Create new task", "Archive tasks", "Exit"];
+const OPTIONS: [&str; 4] = ["Run listener", "Create new task", "Archive tasks", "Exit"];
 
 pub fn run_menu() {
     loop {

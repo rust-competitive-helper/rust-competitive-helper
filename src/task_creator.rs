@@ -1,10 +1,10 @@
+use dialoguer::console::Term;
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::{Input, Select};
 use rust_competitive_helper_util::{
     read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Languages, Task,
     TaskClass, Test, TestType,
 };
-use dialoguer::console::Term;
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Input, Select};
 use std::fs;
 use std::process::Command;
 
@@ -41,17 +41,16 @@ fn select_test_type() -> TestType {
         .items(&TestType::INPUT_TYPES[..])
         .interact_on(&Term::stdout())
         .unwrap();
-    let test_type = match selection {
+    match selection {
         0 => TestType::Single,
         1 => TestType::MultiNumber,
         2 => TestType::MultiEof,
         _ => unreachable!(),
-    };
-    test_type
+    }
 }
 
 pub fn get_solve(task: &Task) -> String {
-    let mut spl = task.group.split(" ");
+    let mut spl = task.group.split(' ');
     let site = match spl.next() {
         None => "default".to_string(),
         Some(site) => site.to_lowercase(),
@@ -189,7 +188,7 @@ fn select_num_tests() -> usize {
         .unwrap()
 }
 
-const INPUT_OPTIONS: [&'static str; 2] = ["Stdin", "File"];
+const INPUT_OPTIONS: [&str; 2] = ["Stdin", "File"];
 
 fn select_input_type() -> IOType {
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -218,7 +217,7 @@ fn select_input_type() -> IOType {
     }
 }
 
-const OUTPUT_OPTIONS: [&'static str; 2] = ["Stdout", "File"];
+const OUTPUT_OPTIONS: [&str; 2] = ["Stdout", "File"];
 
 fn select_output_type() -> IOType {
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -267,7 +266,7 @@ pub fn create_task_wizard() {
         output: select_output_type(),
         languages: Languages {
             java: TaskClass {
-                task_class: name.replace(" ", ""),
+                task_class: name.replace(' ', ""),
             },
         },
     };

@@ -1,7 +1,7 @@
 use crate::{read_lines, IOEnum, Task};
 use std::collections::HashSet;
 
-const LIB_NAME: &'static str = "algo_lib";
+const LIB_NAME: &str = "algo_lib";
 
 #[derive(Debug)]
 struct UsageTree {
@@ -87,7 +87,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
 
 fn build_use_tree_full_line(line: &str) -> BuildResult {
     assert!(line.starts_with("use "));
-    assert!(line.ends_with(";"));
+    assert!(line.ends_with(';'));
     build_use_tree(&line[4..(line.len() - 1)])
 }
 
@@ -127,7 +127,7 @@ mod build_use_tree_tests {
 
 /// Returns file names and fqn paths
 fn all_files_impl(
-    usages: &Vec<UsageTree>,
+    usages: &[UsageTree],
     prefix: String,
     fqn_path: Vec<String>,
     root: bool,
@@ -149,7 +149,7 @@ fn all_files_impl(
         }
     }
     if add && !root {
-        res.push((prefix + ".rs", fqn_path.clone()));
+        res.push((prefix + ".rs", fqn_path));
     }
     res
 }
@@ -200,7 +200,7 @@ fn find_usages_and_code(
         }
         if line.starts_with("use") {
             code.push(line.replace(LIB_NAME, "crate"));
-            while !line.ends_with(";") {
+            while !line.ends_with(';') {
                 let next_line = lines
                     .next()
                     .expect("expect ; in the end of `use` line, end of file found");
@@ -320,13 +320,13 @@ pub fn build() {
         IOEnum::StdOut => {
             code.push("    unsafe {".to_string());
             if task.interactive {
-                code.push(format!(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(std::io::stdout())));"
-                ));
+                code.push(
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(std::io::stdout())));".to_string()
+                );
             } else {
-                code.push(format!(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(std::io::stdout())));"
-                ));
+                code.push(
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(std::io::stdout())));".to_string()
+                );
             }
             code.push("    }".to_string());
         }
@@ -337,13 +337,13 @@ pub fn build() {
             ));
             code.push("    unsafe {".to_string());
             if task.interactive {
-                code.push(format!(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(out_file)));"
-                ));
+                code.push(
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(out_file)));".to_string()
+                );
             } else {
-                code.push(format!(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(out_file)));"
-                ));
+                code.push(
+                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(out_file)));".to_string()
+                );
             }
             code.push("    }".to_string());
         }
