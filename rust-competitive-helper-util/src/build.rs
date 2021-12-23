@@ -243,7 +243,13 @@ fn find_usages_and_code(
 
 fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut Vec<String>) {
     if to_add[0].fqn == prefix {
+        if prefix.is_empty() {
+            code.push("pub mod solution {".to_string());
+        }
         code.append(&mut to_add[0].content);
+        if prefix.is_empty() {
+            code.push("}".to_string());
+        }
         to_add = &mut to_add[1..];
     }
     if to_add.is_empty() {
@@ -351,7 +357,7 @@ pub fn build() {
             unreachable!()
         }
     }
-    code.push("    run(input);".to_string());
+    code.push("    crate::solution::run(input);".to_string());
     code.push("}".to_string());
     crate::write_lines("../main/src/main.rs", code);
 }
