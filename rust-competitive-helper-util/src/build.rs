@@ -210,8 +210,9 @@ fn find_usages_and_code(
         if main {
             continue;
         }
-        if line.starts_with("use") {
+        if line.trim().starts_with("use") {
             code.push(line.replace(LIB_NAME, "crate"));
+            line = line.trim().to_string();
             while !line.ends_with(';') {
                 let next_line = lines
                     .next()
@@ -307,6 +308,12 @@ fn find_macro_impl(
     paths.sort_by_key(|a| a.path());
     for path in paths {
         if path.file_type().unwrap().is_file() {
+            let filename = path.file_name();
+            let filename = filename.to_str().unwrap();
+            if !filename.ends_with(".rs") {
+                continue;
+            }
+            let filename = filename.split_at(filename.len() - 3).0;
             let text = crate::read_from_file(path.path());
             let mut text = text.as_str();
             while let Some(pos) = text.find("#[macro_export]") {
@@ -315,9 +322,14 @@ fn find_macro_impl(
                 text = text.split_at(pos + "macro_rules!".len()).1;
                 let pos = text.find('{').unwrap();
                 let macro_name = text.split_at(pos).0.trim();
+                let mut fqn = fqn.clone();
+                fqn.push(filename.to_string());
                 res.insert(
                     macro_name.to_string(),
-                    (path.path().to_str().unwrap().to_string(), fqn.clone()),
+                    (
+                        path.path().to_str().unwrap().replace("\\", "/").to_string(),
+                        fqn,
+                    ),
                 );
             }
         } else if path.file_type().unwrap().is_dir() {
