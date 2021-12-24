@@ -1,5 +1,5 @@
 use crate::{read_lines, IOEnum, Task};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const LIB_NAME: &str = "algo_lib";
 
@@ -131,12 +131,18 @@ fn all_files_impl(
     prefix: String,
     fqn_path: Vec<String>,
     root: bool,
+    all_macro: &HashMap<String, (String, Vec<String>)>,
 ) -> Vec<(String, Vec<String>)> {
     let mut res = Vec::new();
     let mut add = false;
     for usage in usages.iter() {
         if usage.children.is_empty() {
-            add = true;
+            if root {
+                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap();
+                res.push((file_name.clone(), fqn.clone()));
+            } else {
+                add = true;
+            }
         } else {
             let mut fqn_path = fqn_path.clone();
             fqn_path.push(usage.tag.clone());
@@ -145,22 +151,27 @@ fn all_files_impl(
                 format!("{}/{}", prefix, usage.tag),
                 fqn_path,
                 false,
+                all_macro,
             ));
         }
     }
-    if add && !root {
+    if add {
         res.push((prefix + ".rs", fqn_path));
     }
     res
 }
 
 /// Returns file names and fqn paths
-fn all_files(usage_tree: &UsageTree) -> Vec<(String, Vec<String>)> {
+fn all_files(
+    usage_tree: &UsageTree,
+    all_macro: &HashMap<String, (String, Vec<String>)>,
+) -> Vec<(String, Vec<String>)> {
     all_files_impl(
         &usage_tree.children,
         format!("../{}/src", LIB_NAME),
         Vec::new(),
         true,
+        all_macro,
     )
 }
 
@@ -175,6 +186,7 @@ fn find_usages_and_code(
     prefix: &str,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
+    all_macro: &HashMap<String, (String, Vec<String>)>,
 ) -> (Vec<CodeFile>, Option<Task>) {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
@@ -209,7 +221,7 @@ fn find_usages_and_code(
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag.as_str() == prefix {
-                        let all = all_files(&usage);
+                        let all = all_files(&usage, all_macro);
                         for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
@@ -218,6 +230,7 @@ fn find_usages_and_code(
                                     "crate",
                                     fqn_path,
                                     processed,
+                                    all_macro,
                                 );
                                 all_code.extend(call_code);
                             }
@@ -282,9 +295,56 @@ fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut V
     }
 }
 
+fn find_macro_impl(
+    path: String,
+    fqn: Vec<String>,
+    res: &mut HashMap<String, (String, Vec<String>)>,
+) {
+    let mut paths = std::fs::read_dir(path)
+        .unwrap()
+        .map(|res| res.unwrap())
+        .collect::<Vec<_>>();
+    paths.sort_by_key(|a| a.path());
+    for path in paths {
+        if path.file_type().unwrap().is_file() {
+            let text = crate::read_from_file(path.path());
+            let mut text = text.as_str();
+            while let Some(pos) = text.find("#[macro_export]") {
+                text = text.split_at(pos + 1).1;
+                let pos = text.find("macro_rules!").unwrap();
+                text = text.split_at(pos + "macro_rules!".len()).1;
+                let pos = text.find('{').unwrap();
+                let macro_name = text.split_at(pos).0.trim();
+                res.insert(
+                    macro_name.to_string(),
+                    (path.path().to_str().unwrap().to_string(), fqn.clone()),
+                );
+            }
+        } else if path.file_type().unwrap().is_dir() {
+            let mut fqn = fqn.clone();
+            fqn.push(path.file_name().to_str().unwrap().to_string());
+            find_macro_impl(path.path().to_str().unwrap().to_string(), fqn, res);
+        }
+    }
+}
+
+fn find_macro() -> HashMap<String, (String, Vec<String>)> {
+    let root = format!("../{}/src", LIB_NAME);
+    let mut res = HashMap::new();
+    find_macro_impl(root, Vec::new(), &mut res);
+    res
+}
+
 pub fn build() {
-    let (mut all_code, task) =
-        find_usages_and_code("src/main.rs", LIB_NAME, Vec::new(), &mut HashSet::new());
+    let all_macro = find_macro();
+    println!("{:?}", all_macro);
+    let (mut all_code, task) = find_usages_and_code(
+        "src/main.rs",
+        LIB_NAME,
+        Vec::new(),
+        &mut HashSet::new(),
+        &all_macro,
+    );
     let mut code = Vec::new();
     all_code.sort();
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
