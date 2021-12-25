@@ -310,27 +310,25 @@ fn find_macro_impl(
         if path.file_type().unwrap().is_file() {
             let filename = path.file_name();
             let filename = filename.to_str().unwrap();
-            if !filename.ends_with(".rs") {
-                continue;
-            }
-            let filename = filename.split_at(filename.len() - 3).0;
-            let text = crate::read_from_file(path.path());
-            let mut text = text.as_str();
-            while let Some(pos) = text.find("#[macro_export]") {
-                text = text.split_at(pos + 1).1;
-                let pos = text.find("macro_rules!").unwrap();
-                text = text.split_at(pos + "macro_rules!".len()).1;
-                let pos = text.find('{').unwrap();
-                let macro_name = text.split_at(pos).0.trim();
-                let mut fqn = fqn.clone();
-                fqn.push(filename.to_string());
-                res.insert(
-                    macro_name.to_string(),
-                    (
-                        path.path().to_str().unwrap().replace("\\", "/").to_string(),
-                        fqn,
-                    ),
-                );
+            if let Some(filename) = filename.strip_suffix(".rs") {
+                let text = crate::read_from_file(path.path());
+                let mut text = text.as_str();
+                while let Some(pos) = text.find("#[macro_export]") {
+                    text = &text[pos..];
+                    let pos = text.find("macro_rules!").unwrap();
+                    text = &text[(pos + "macro_rules!".len())..];
+                    let pos = text.find('{').unwrap();
+                    let macro_name = &text[..pos].trim();
+                    let mut fqn = fqn.clone();
+                    fqn.push(filename.to_string());
+                    res.insert(
+                        macro_name.to_string(),
+                        (
+                            path.path().to_str().unwrap().replace('\\', "/").to_string(),
+                            fqn,
+                        ),
+                    );
+                }
             }
         } else if path.file_type().unwrap().is_dir() {
             let mut fqn = fqn.clone();
@@ -349,7 +347,6 @@ fn find_macro() -> HashMap<String, (String, Vec<String>)> {
 
 pub fn build() {
     let all_macro = find_macro();
-    println!("{:?}", all_macro);
     let (mut all_code, task) = find_usages_and_code(
         "src/main.rs",
         LIB_NAME,
