@@ -210,7 +210,7 @@ fn find_usages_and_code(
         if main {
             continue;
         }
-        if line.trim().starts_with("use") {
+        if line.trim().starts_with("use ") {
             code.push(line.replace(LIB_NAME, "crate"));
             line = line.trim().to_string();
             while !line.ends_with(';') {
