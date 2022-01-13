@@ -211,7 +211,6 @@ fn find_usages_and_code(
             continue;
         }
         if line.trim().starts_with("use ") {
-            code.push(line.replace(LIB_NAME, "crate"));
             line = line.trim().to_string();
             while !line.ends_with(';') {
                 let next_line = lines
@@ -219,6 +218,7 @@ fn find_usages_and_code(
                     .expect("expect ; in the end of `use` line, end of file found");
                 line += next_line.trim();
             }
+            code.push(line.replace(LIB_NAME, "crate"));
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag.as_str() == prefix {
