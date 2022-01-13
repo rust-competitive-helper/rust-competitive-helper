@@ -30,3 +30,8 @@ If you want to use your version of rust-contest-helper, you can run it like this
 ```
 RUST_BACKTRACE=1 cargo run --manifest-path ../rust-competitive-helper/Cargo.toml 
 ```
+
+If bug was fixed in this library, and you want cargo to start use new version, run:
+```
+cargo update
+```
