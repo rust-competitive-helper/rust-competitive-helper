@@ -345,6 +345,14 @@ fn find_macro() -> HashMap<String, (String, Vec<String>)> {
     res
 }
 
+fn add_rerun_if_changed_instructions() {
+    let add = |file: &str| {
+        println!("cargo:rerun-if-changed={}", file);
+    };
+    add(".");
+    add(&format!("../{}", LIB_NAME));
+}
+
 pub fn build() {
     let all_macro = find_macro();
     let (mut all_code, task) = find_usages_and_code(
@@ -429,4 +437,5 @@ pub fn build() {
     code.push("    crate::solution::run(input);".to_string());
     code.push("}".to_string());
     crate::write_lines("../main/src/main.rs", code);
+    add_rerun_if_changed_instructions();
 }
