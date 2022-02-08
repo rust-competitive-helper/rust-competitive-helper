@@ -19,6 +19,25 @@ To use with [Competitive Companion](https://github.com/jmerle/competitive-compan
 - Testing should be done by running main.rs in corresponding crate
 - Submit ./main/src/main.rs
 
+# Config
+There is a config file, which is automatically created on the first run.
+
+Default locations:
+- Linux:   /home/alice/.config/rust-competitive-helper
+- Windows: C:\Users\Alice\AppData\Roaming\Foo Corp\rust-competitive-helper
+- macOS:   /Users/Alice/Library/Preferences/rust-competitive-helper
+ 
+By default CLion is used to open newly created task, but you can 
+override it to use vscode for example:
+```
+open_task_command = [
+    '/usr/bin/code',
+    '-r',
+    '--goto',
+    '$FILE:$LINE:$COLUMN',
+]
+```
+
 # Other stuff
 
 To make git not track changes in auto-generated main.rs file:
