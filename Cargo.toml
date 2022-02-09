@@ -13,6 +13,7 @@ serde_json = "~1.0"
 dialoguer = "~0.9"
 chrono = "~0.4"
 itertools = "~0.10"
+confy = "~0.4"
 rust_competitive_helper_util = {path = "rust-competitive-helper-util"}
 
 [workspace]

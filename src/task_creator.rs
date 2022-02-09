@@ -5,8 +5,10 @@ use rust_competitive_helper_util::{
     read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Languages, Task,
     TaskClass, Test, TestType,
 };
+use std::collections::HashMap;
 use std::fs;
-use std::process::Command;
+
+use crate::config::Config;
 
 pub fn task_name(task: &Task) -> String {
     let mut res = String::new();
@@ -71,6 +73,7 @@ pub fn get_invoke(task: &Task) -> String {
 }
 
 pub fn create(task: Task) {
+    let config = Config::load();
     let name = task_name(&task);
     let mut lines = Vec::new();
     for l in read_lines("Cargo.toml") {
@@ -99,7 +102,7 @@ pub fn create(task: Task) {
     let mut main = read_from_file("templates/main.rs");
     main = main.replace("$SOLVE", solve.as_str());
     main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
-    let (row, col) = match main.find("$CARET") {
+    let (row, col): (i32, i32) = match main.find("$CARET") {
         None => (1, 1),
         Some(pos) => {
             let chars = main.chars().take(pos);
@@ -125,40 +128,17 @@ pub fn create(task: Task) {
     toml = toml.replace("$TASK", name.as_str());
     write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
     println!("Task {} parsed", name);
-    #[cfg(windows)]
-    match Command::new("..\\clion.cmd")
-        .args([
-            "--line",
-            row.to_string().as_str(),
-            "--column",
-            col.to_string().as_str(),
-            format!("{}/src/main.rs", name).as_str(),
-        ])
-        .output()
-    {
+
+    let open_task_result = {
+        let mut templates_args: HashMap<String, String> = HashMap::new();
+        templates_args.insert("$LINE".to_owned(), row.to_string());
+        templates_args.insert("$COLUMN".to_owned(), col.to_string());
+        templates_args.insert("$FILE".to_owned(), format!("{}/src/main.rs", name));
+        config.run_open_task_command(&templates_args)
+    };
+    match open_task_result {
         Ok(_) => {}
         Err(err) => eprintln!("{}", err),
-    }
-
-    #[cfg(not(windows))]
-    {
-        let clion_path = std::env::var("HOME").unwrap() + "/.local/bin/clion";
-        match Command::new(&clion_path)
-            .args([
-                "--line",
-                row.to_string().as_str(),
-                "--column",
-                col.to_string().as_str(),
-                format!("{}/src/main.rs", name).as_str(),
-            ])
-            .output()
-        {
-            Ok(_) => {}
-            Err(err) => eprintln!(
-                "Can't open project in CLion: {} (clion_path : {})",
-                err, clion_path
-            ),
-        }
     }
 }
 

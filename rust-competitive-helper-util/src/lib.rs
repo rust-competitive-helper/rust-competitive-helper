@@ -89,7 +89,8 @@ pub struct Task {
 }
 
 pub fn read_from_file<P: AsRef<Path>>(filename: P) -> String {
-    fs::read_to_string(filename).unwrap()
+    fs::read_to_string(&filename)
+        .unwrap_or_else(|_| panic!("Can't read file: {:?}", filename.as_ref().as_os_str()))
 }
 
 pub fn read_lines<P>(filename: P) -> Vec<String>
