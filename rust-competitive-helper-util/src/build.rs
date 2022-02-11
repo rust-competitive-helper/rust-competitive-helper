@@ -1,4 +1,4 @@
-use crate::{read_lines, IOEnum, Task};
+use crate::{read_lines, Task};
 use std::collections::{HashMap, HashSet};
 
 const LIB_NAME: &str = "algo_lib";
@@ -355,7 +355,7 @@ fn add_rerun_if_changed_instructions() {
 
 pub fn build() {
     let all_macro = find_macro();
-    let (mut all_code, task) = find_usages_and_code(
+    let (mut all_code, _task) = find_usages_and_code(
         "src/main.rs",
         LIB_NAME,
         Vec::new(),
@@ -366,75 +366,7 @@ pub fn build() {
     all_code.sort();
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
     code.push("fn main() {".to_string());
-    let task = task.unwrap();
-    match task.input.io_type {
-        IOEnum::StdIn | IOEnum::Regex => {
-            code.push("    let mut sin = std::io::stdin();".to_string());
-            if task.interactive {
-                code.push(
-                    "    let input = crate::io::input::Input::new_with_size(&mut sin, 1);"
-                        .to_string(),
-                );
-            } else {
-                code.push("    let input = crate::io::input::Input::new(&mut sin);".to_string());
-            }
-        }
-        IOEnum::File => {
-            code.push(format!(
-                "    let mut in_file = std::fs::File::open(\"{}\").unwrap();",
-                task.input.file_name.unwrap()
-            ));
-            if task.interactive {
-                code.push(
-                    "    let input = crate::io::input::Input::new_with_size(&mut in_file, 1);"
-                        .to_string(),
-                );
-            } else {
-                code.push(
-                    "    let input = crate::io::input::Input::new(&mut in_file);".to_string(),
-                );
-            }
-        }
-        _ => {
-            unreachable!()
-        }
-    }
-    match task.output.io_type {
-        IOEnum::StdOut => {
-            code.push("    unsafe {".to_string());
-            if task.interactive {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(std::io::stdout())));".to_string()
-                );
-            } else {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(std::io::stdout())));".to_string()
-                );
-            }
-            code.push("    }".to_string());
-        }
-        IOEnum::File => {
-            code.push(format!(
-                "    let out_file = std::fs::File::create(\"{}\").unwrap();",
-                task.output.file_name.unwrap()
-            ));
-            code.push("    unsafe {".to_string());
-            if task.interactive {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(out_file)));".to_string()
-                );
-            } else {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(out_file)));".to_string()
-                );
-            }
-            code.push("    }".to_string());
-        }
-        _ => {
-            unreachable!()
-        }
-    }
-    code.push("    crate::solution::run(input);".to_string());
+    code.push("    crate::solution::submit();".to_string());
     code.push("}".to_string());
     crate::write_lines("../main/src/main.rs", code);
     add_rerun_if_changed_instructions();
