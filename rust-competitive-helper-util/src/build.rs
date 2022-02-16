@@ -1,4 +1,4 @@
-use crate::{read_lines, Task};
+use crate::read_lines;
 use std::collections::{HashMap, HashSet};
 
 const LIB_NAME: &str = "algo_lib";
@@ -187,17 +187,12 @@ fn find_usages_and_code(
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
     all_macro: &HashMap<String, (String, Vec<String>)>,
-) -> (Vec<CodeFile>, Option<Task>) {
+) -> Vec<CodeFile> {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
     let mut main = false;
-    let mut task = None;
 
     let mut lines = read_lines(file).into_iter();
-    if prefix == LIB_NAME {
-        let task_json = lines.next().unwrap().chars().skip(2).collect::<String>();
-        task = Some(serde_json::from_str::<Task>(task_json.as_str()).unwrap());
-    }
     while let Some(mut line) = lines.next() {
         if line.as_str() == "//START MAIN" {
             main = true;
@@ -226,7 +221,7 @@ fn find_usages_and_code(
                         for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
-                                let (call_code, ..) = find_usages_and_code(
+                                let call_code = find_usages_and_code(
                                     file.as_str(),
                                     "crate",
                                     fqn_path,
@@ -252,7 +247,7 @@ fn find_usages_and_code(
         fqn: fqn_path,
     });
 
-    (all_code, task)
+    all_code
 }
 
 fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut Vec<String>) {
@@ -355,7 +350,7 @@ fn add_rerun_if_changed_instructions() {
 
 pub fn build() {
     let all_macro = find_macro();
-    let (mut all_code, _task) = find_usages_and_code(
+    let mut all_code = find_usages_and_code(
         "src/main.rs",
         LIB_NAME,
         Vec::new(),
