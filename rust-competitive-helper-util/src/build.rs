@@ -1,8 +1,6 @@
 use crate::read_lines;
 use std::collections::{HashMap, HashSet};
 
-const LIB_NAME: &str = "algo_lib";
-
 #[derive(Debug)]
 struct UsageTree {
     tag: String,
@@ -27,7 +25,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
             } else if usage[i] == '}' {
                 level -= 1;
             } else if usage[i] == ',' && level == 0usize {
-                match build_use_tree(usage[start..i].iter().cloned().collect::<String>().as_str()) {
+                match build_use_tree(usage[start..i].iter().collect::<String>().as_str()) {
                     BuildResult::Usage(usage) => {
                         res.push(usage);
                     }
@@ -60,7 +58,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
     } else {
         match usage.iter().position(|&r| r == ':') {
             None => BuildResult::Usage(UsageTree {
-                tag: usage.iter().cloned().collect(),
+                tag: usage.iter().collect(),
                 children: Vec::new(),
             }),
             Some(pos) => {
@@ -77,7 +75,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
                     BuildResult::Children(children) => children,
                 };
                 BuildResult::Usage(UsageTree {
-                    tag: usage[..pos].iter().cloned().collect(),
+                    tag: usage[..pos].iter().collect(),
                     children,
                 })
             }
@@ -165,11 +163,12 @@ fn all_files_impl(
 fn all_files(
     usage_tree: &UsageTree,
     all_macro: &HashMap<String, (String, Vec<String>)>,
+    library: &str,
 ) -> Vec<(String, Vec<String>)> {
     all_files_impl(
         &usage_tree.children,
-        format!("../{}/src", LIB_NAME),
-        Vec::new(),
+        format!("../{}/src", library),
+        vec![library.to_owned()],
         true,
         all_macro,
     )
@@ -181,12 +180,46 @@ struct CodeFile {
     content: Vec<String>,
 }
 
+// Inside solution we replace:
+// ``use algo_lib::`` with ``use crate::algo_lib``
+//
+// Inside [algo_lib] we replace
+// ``use crate::`` with ``use crate::algo_lib``
+//
+// Also special case for macros, we replace them with
+// ``use crate::*macro*``
+//
+fn add_usages_to_code(
+    code: &mut Vec<String>,
+    usage_tree: &UsageTree,
+    mut path: Vec<String>,
+    all_macro: &HashMap<String, (String, Vec<String>)>,
+    libraries: &[String],
+) {
+    path.push(usage_tree.tag.clone());
+    if usage_tree.children.is_empty() {
+        if !path.is_empty() && libraries.contains(&path[0]) {
+            if path.len() == 2 && all_macro.contains_key(&path[1]) {
+                code.push(format!("use crate::{};", path[1]));
+            } else {
+                code.push(format!("use crate::{};", path.join("::")));
+            }
+        } else {
+            code.push(format!("use {};", path.join("::")));
+        }
+    } else {
+        for child in usage_tree.children.iter() {
+            add_usages_to_code(code, child, path.clone(), all_macro, libraries)
+        }
+    }
+}
+
 fn find_usages_and_code(
     file: &str,
-    prefix: &str,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
     all_macro: &HashMap<String, (String, Vec<String>)>,
+    libraries: &[String],
 ) -> Vec<CodeFile> {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
@@ -213,20 +246,32 @@ fn find_usages_and_code(
                     .expect("expect ; in the end of `use` line, end of file found");
                 line += next_line.trim();
             }
-            code.push(line.replace(LIB_NAME, "crate"));
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
-                    if usage.tag.as_str() == prefix {
-                        let all = all_files(&usage, all_macro);
+                    if usage.tag == "crate" {
+                        let path = vec![fqn_path[0].clone()];
+                        for child in usage.children.iter() {
+                            add_usages_to_code(&mut code, child, path.clone(), all_macro, libraries)
+                        }
+                    } else {
+                        add_usages_to_code(&mut code, &usage, vec![], all_macro, libraries);
+                    };
+                    if usage.tag == "crate" || libraries.contains(&usage.tag) {
+                        let library = if usage.tag == "crate" {
+                            &fqn_path[0]
+                        } else {
+                            &usage.tag
+                        };
+                        let all = all_files(&usage, all_macro, library);
                         for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
                                 let call_code = find_usages_and_code(
                                     file.as_str(),
-                                    "crate",
                                     fqn_path,
                                     processed,
                                     all_macro,
+                                    libraries,
                                 );
                                 all_code.extend(call_code);
                             }
@@ -333,29 +378,33 @@ fn find_macro_impl(
     }
 }
 
-fn find_macro() -> HashMap<String, (String, Vec<String>)> {
-    let root = format!("../{}/src", LIB_NAME);
+fn find_macro(libraries: &[String]) -> HashMap<String, (String, Vec<String>)> {
     let mut res = HashMap::new();
-    find_macro_impl(root, Vec::new(), &mut res);
+    for lib in libraries.iter() {
+        let root = format!("../{}/src", lib);
+        find_macro_impl(root, Vec::new(), &mut res);
+    }
     res
 }
 
-fn add_rerun_if_changed_instructions() {
+fn add_rerun_if_changed_instructions(libraries: &[String]) {
     let add = |file: &str| {
         println!("cargo:rerun-if-changed={}", file);
     };
     add(".");
-    add(&format!("../{}", LIB_NAME));
+    for lib in libraries.iter() {
+        add(&format!("../{}", lib));
+    }
 }
 
-pub fn build() {
-    let all_macro = find_macro();
+pub fn build_several_libraries(libraries: &[String]) {
+    let all_macro = find_macro(libraries);
     let mut all_code = find_usages_and_code(
         "src/main.rs",
-        LIB_NAME,
         Vec::new(),
         &mut HashSet::new(),
         &all_macro,
+        libraries,
     );
     let mut code = Vec::new();
     all_code.sort();
@@ -364,5 +413,9 @@ pub fn build() {
     code.push("    crate::solution::submit();".to_string());
     code.push("}".to_string());
     crate::write_lines("../main/src/main.rs", code);
-    add_rerun_if_changed_instructions();
+    add_rerun_if_changed_instructions(libraries);
+}
+
+pub fn build() {
+    build_several_libraries(&vec!["algo_lib".to_owned()]);
 }
