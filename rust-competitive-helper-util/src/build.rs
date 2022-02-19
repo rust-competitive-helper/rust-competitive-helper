@@ -1,5 +1,8 @@
 use crate::read_lines;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
 
 #[derive(Debug)]
 struct UsageTree {
@@ -11,6 +14,13 @@ struct UsageTree {
 enum BuildResult {
     Usage(UsageTree),
     Children(Vec<UsageTree>),
+}
+
+#[allow(unused)]
+fn log(msg: &str) {
+    if env::var("LOG").is_ok() {
+        eprintln!("{}", msg);
+    }
 }
 
 fn build_use_tree(usage: &str) -> BuildResult {
@@ -216,6 +226,7 @@ fn add_usages_to_code(
 
 fn find_usages_and_code(
     file: &str,
+    current_lib: Option<String>,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
     all_macro: &HashMap<String, (String, Vec<String>)>,
@@ -224,6 +235,8 @@ fn find_usages_and_code(
     let mut code = Vec::new();
     let mut all_code = Vec::new();
     let mut main = false;
+
+    log(&format!("Parsing file {}...", file));
 
     let mut lines = read_lines(file).into_iter();
     while let Some(mut line) = lines.next() {
@@ -249,7 +262,7 @@ fn find_usages_and_code(
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag == "crate" {
-                        let path = vec![fqn_path[0].clone()];
+                        let path = vec![current_lib.clone().unwrap()];
                         for child in usage.children.iter() {
                             add_usages_to_code(&mut code, child, path.clone(), all_macro, libraries)
                         }
@@ -257,17 +270,23 @@ fn find_usages_and_code(
                         add_usages_to_code(&mut code, &usage, vec![], all_macro, libraries);
                     };
                     if usage.tag == "crate" || libraries.contains(&usage.tag) {
+                        log(&format!("fqn path = {:?}", fqn_path));
                         let library = if usage.tag == "crate" {
-                            &fqn_path[0]
+                            current_lib.clone().unwrap()
                         } else {
-                            &usage.tag
+                            usage.tag.clone()
                         };
-                        let all = all_files(&usage, all_macro, library);
+                        let all = all_files(&usage, all_macro, &library);
+                        log(&format!(
+                            "Usage: {:?}, need to check recursively: {:?}",
+                            &usage, all
+                        ));
                         for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
                                 let call_code = find_usages_and_code(
                                     file.as_str(),
+                                    Some(library.clone()),
                                     fqn_path,
                                     processed,
                                     all_macro,
@@ -296,6 +315,13 @@ fn find_usages_and_code(
 }
 
 fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut Vec<String>) {
+    if prefix.is_empty() {
+        log("Build code:");
+        for code_file in to_add.iter() {
+            log(&format!("{:?}", code_file.fqn));
+        }
+    }
+
     if to_add[0].fqn == prefix {
         if prefix.is_empty() {
             code.push("pub mod solution {".to_string());
@@ -379,11 +405,13 @@ fn find_macro_impl(
 }
 
 fn find_macro(libraries: &[String]) -> HashMap<String, (String, Vec<String>)> {
+    log("Find all macros...");
     let mut res = HashMap::new();
     for lib in libraries.iter() {
         let root = format!("../{}/src", lib);
-        find_macro_impl(root, Vec::new(), &mut res);
+        find_macro_impl(root, vec![lib.clone()], &mut res);
     }
+    log(&format!("Found macros: {:?}", res));
     res
 }
 
@@ -401,6 +429,7 @@ pub fn build_several_libraries(libraries: &[String]) {
     let all_macro = find_macro(libraries);
     let mut all_code = find_usages_and_code(
         "src/main.rs",
+        None,
         Vec::new(),
         &mut HashSet::new(),
         &all_macro,
