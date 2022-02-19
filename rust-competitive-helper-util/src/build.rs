@@ -173,18 +173,16 @@ fn all_files_impl(
 fn all_files(
     usage_tree: &UsageTree,
     all_macro: &HashMap<String, (String, Vec<String>)>,
-    library: &str,
+    library: &Option<String>,
 ) -> Vec<(String, Vec<String>)> {
-    all_files_impl(
-        &usage_tree.children,
-        format!("../{}/src", library),
-        vec![library.to_owned()],
-        true,
-        all_macro,
-    )
+    let (prefix, fqn_path) = match library {
+        Some(library) => (format!("../{}/src", library), vec![library.clone()]),
+        None => ("src".to_owned(), vec![]),
+    };
+    all_files_impl(&usage_tree.children, prefix, fqn_path, true, all_macro)
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 struct CodeFile {
     fqn: Vec<String>,
     content: Vec<String>,
@@ -210,11 +208,15 @@ fn add_usages_to_code(
     if usage_tree.children.is_empty() {
         if !path.is_empty() && libraries.contains(&path[0]) {
             if path.len() == 2 && all_macro.contains_key(&path[1]) {
+                // special case for macros
                 code.push(format!("use crate::{};", path[1]));
             } else {
                 code.push(format!("use crate::{};", path.join("::")));
             }
         } else {
+            // common code (e.g. standard library)
+            // also multi-file solutions goes this path
+            // with path[0] == "crate"
             code.push(format!("use {};", path.join("::")));
         }
     } else {
@@ -262,7 +264,10 @@ fn find_usages_and_code(
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag == "crate" {
-                        let path = vec![current_lib.clone().unwrap()];
+                        let path = match &current_lib {
+                            None => vec!["crate".to_owned()],
+                            Some(lib) => vec![lib.clone()],
+                        };
                         for child in usage.children.iter() {
                             add_usages_to_code(&mut code, child, path.clone(), all_macro, libraries)
                         }
@@ -272,9 +277,9 @@ fn find_usages_and_code(
                     if usage.tag == "crate" || libraries.contains(&usage.tag) {
                         log(&format!("fqn path = {:?}", fqn_path));
                         let library = if usage.tag == "crate" {
-                            current_lib.clone().unwrap()
+                            current_lib.clone()
                         } else {
-                            usage.tag.clone()
+                            Some(usage.tag.clone())
                         };
                         let all = all_files(&usage, all_macro, &library);
                         log(&format!(
@@ -286,7 +291,7 @@ fn find_usages_and_code(
                                 processed.insert(file.clone());
                                 let call_code = find_usages_and_code(
                                     file.as_str(),
-                                    Some(library.clone()),
+                                    library.clone(),
                                     fqn_path,
                                     processed,
                                     all_macro,
@@ -301,6 +306,10 @@ fn find_usages_and_code(
                     unreachable!()
                 }
             }
+        } else if line.trim().starts_with("mod ") {
+            // In case of multi-file solution, [main.rs] could register other files
+            // with "mod ...;". As we put everything into one file, we don't need to
+            // do it.
         } else {
             code.push(line.clone());
         }
@@ -436,7 +445,15 @@ pub fn build_several_libraries(libraries: &[String]) {
         libraries,
     );
     let mut code = Vec::new();
-    all_code.sort();
+
+    // try to put real new code on top of the generated file
+    all_code.sort_by_key(|code_file| -> (bool, CodeFile) {
+        let is_library_code = match code_file.fqn.get(0) {
+            Some(module) => libraries.contains(module),
+            None => false,
+        };
+        (is_library_code, code_file.clone())
+    });
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
     code.push("fn main() {".to_string());
     code.push("    crate::solution::submit();".to_string());
