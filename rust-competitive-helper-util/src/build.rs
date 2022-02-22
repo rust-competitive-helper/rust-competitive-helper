@@ -146,7 +146,12 @@ fn all_files_impl(
     for usage in usages.iter() {
         if usage.children.is_empty() {
             if root {
-                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap();
+                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap_or_else(|| {
+                    panic!(
+                        "Expected macro, but couldn't find its defintion. {:?}",
+                        usage.tag
+                    )
+                });
                 res.push((file_name.clone(), fqn.clone()));
             } else {
                 add = true;
