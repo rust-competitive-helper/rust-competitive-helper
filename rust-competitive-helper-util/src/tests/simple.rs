@@ -50,4 +50,42 @@ mod test {
         let expected = expect_file!["outputs/use_lib_main.rs"];
         expected.assert_eq(&gen_code(&mut file_explorer));
     }
+
+    #[test]
+    fn dbg_macro() {
+        let mut file_explorer = FakeFileExplorer::new();
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+            use algo_lib::dbg;
+
+            pub fn submit() {
+                dbg!("Hello");
+            }
+        "#,
+        );
+        file_explorer.add_file(
+            "../algo_lib/src/misc/dbg_macro.rs",
+            r#"
+            
+            #[macro_export]
+            #[allow(unused_macros)]
+            macro_rules! dbg {
+                ($first_val:expr, $($val:expr),+ $(,)?) => {
+                    eprint!("[{}:{}] {} = {:?}",
+                                file!(), line!(), stringify!($first_val), &$first_val);
+                    ($(eprint!(", {} = {:?}", stringify!($val), &$val)),+,);
+                    eprintln!();
+                };
+                ($first_val:expr) => {
+                    eprintln!("[{}:{}] {} = {:?}",
+                                file!(), line!(), stringify!($first_val), &$first_val)
+                };
+            }
+
+        "#,
+        );
+        let expected = expect_file!["outputs/dbg_macro_main.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
 }

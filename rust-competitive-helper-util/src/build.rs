@@ -379,7 +379,10 @@ fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut V
 }
 
 fn gen_fqn_by_path(path: &str) -> Vec<String> {
-    path.split("/").map(str::to_string).collect()
+    path.split("/")
+        .map(|s| s.strip_suffix(".rs").unwrap_or(s))
+        .map(str::to_string)
+        .collect()
 }
 
 fn find_macro_impl<F: FileExplorer>(
@@ -405,7 +408,12 @@ fn find_macro_impl<F: FileExplorer>(
             fqn.insert(0, lib_name.to_owned());
             res.insert(
                 macro_name.to_string(),
-                (path.replace('\\', "/").to_string(), fqn),
+                (
+                    format!("{}{}", path_prefix, path)
+                        .replace('\\', "/")
+                        .to_string(),
+                    fqn,
+                ),
             );
         }
     }
