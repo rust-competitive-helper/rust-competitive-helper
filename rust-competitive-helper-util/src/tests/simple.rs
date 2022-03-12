@@ -8,7 +8,11 @@ mod test {
     };
 
     fn gen_code<F: FileExplorer>(file_explorer: &mut F) -> String {
-        build_several_libraries_impl(&["algo_lib".to_owned()], file_explorer).join("\n")
+        build_several_libraries_impl(
+            &["algo_lib".to_owned(), "marathon_utils".to_owned()],
+            file_explorer,
+        )
+        .join("\n")
     }
 
     #[test]
@@ -86,6 +90,41 @@ mod test {
         "#,
         );
         let expected = expect_file!["outputs/dbg_macro_main.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
+
+    #[test]
+    fn several_libs() {
+        let mut file_explorer = FakeFileExplorer::new();
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+            use algo_lib::double::double;
+            use marathon_utils::sum::sum;
+
+            pub fn submit() {
+                println!("{}", sum(5, double(2)));
+            }
+        "#,
+        );
+        file_explorer.add_file(
+            "../algo_lib/src/double.rs",
+            r#"
+            pub fn double(x : i32) -> i32 {
+                x * 2
+            }
+        "#,
+        );
+
+        file_explorer.add_file(
+            "../marathon_utils/src/sum.rs",
+            r#"
+            pub fn sum(x : i32, y : i32) -> i32 {
+                x + y
+            }
+        "#,
+        );
+        let expected = expect_file!["outputs/several_libs_main.rs"];
         expected.assert_eq(&gen_code(&mut file_explorer));
     }
 }
