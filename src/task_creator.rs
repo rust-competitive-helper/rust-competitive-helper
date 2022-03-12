@@ -72,6 +72,33 @@ pub fn get_invoke(task: &Task) -> String {
     })
 }
 
+pub fn get_io_settings(task: &Task) -> String {
+    let input = match task.input.io_type {
+        IOEnum::StdIn | IOEnum::Regex => "TaskIoType::Std".to_string(),
+        IOEnum::StdOut => panic!("input should not have type StdOut"),
+        IOEnum::File => format!(
+            "TaskIoType::File(\"{}\".to_string())",
+            task.input.file_name.clone().unwrap()
+        ),
+    };
+    let output = match task.output.io_type {
+        IOEnum::StdOut | IOEnum::Regex => "TaskIoType::Std".to_string(),
+        IOEnum::StdIn => panic!("output should not have type StdIn"),
+        IOEnum::File => format!(
+            "TaskIoType::File(\"{}\".to_string())",
+            task.output.file_name.clone().unwrap()
+        ),
+    };
+    format!(
+        "TaskIoSettings {{
+        is_interactive: {},
+        input: {},
+        output: {},
+    }}",
+        task.interactive, input, output
+    )
+}
+
 pub fn create(task: Task) {
     let config = Config::load();
     let name = task_name(&task);
@@ -102,10 +129,11 @@ pub fn create(task: Task) {
     let mut main = read_from_file("templates/main.rs");
     main = main.replace("$SOLVE", solve.as_str());
     main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
+    main = main.replace("$IO_SETTINGS", get_io_settings(&task).as_str());
     let (row, col): (i32, i32) = match main.find("$CARET") {
         None => (1, 1),
         Some(pos) => {
-            let chars = main.chars().take(pos);
+            let chars = main[..pos].chars();
             let mut row = 1;
             let mut col = 1;
             for c in chars {
