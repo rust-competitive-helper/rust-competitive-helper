@@ -1,4 +1,4 @@
-use crate::read_lines;
+use crate::file_explorer::{FileExplorer, RealFileExplorer};
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -231,13 +231,14 @@ fn add_usages_to_code(
     }
 }
 
-fn find_usages_and_code(
+fn find_usages_and_code<F: FileExplorer>(
     file: &str,
     current_lib: Option<String>,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
     all_macro: &HashMap<String, (String, Vec<String>)>,
     libraries: &[String],
+    file_explorer: &F,
 ) -> Vec<CodeFile> {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
@@ -245,7 +246,7 @@ fn find_usages_and_code(
 
     log(&format!("Parsing file {}...", file));
 
-    let mut lines = read_lines(file).into_iter();
+    let mut lines = file_explorer.read_file(file).into_iter();
     while let Some(mut line) = lines.next() {
         if line.as_str() == "//START MAIN" {
             main = true;
@@ -301,6 +302,7 @@ fn find_usages_and_code(
                                     processed,
                                     all_macro,
                                     libraries,
+                                    file_explorer,
                                 );
                                 all_code.extend(call_code);
                             }
@@ -376,54 +378,48 @@ fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut V
     }
 }
 
-fn find_macro_impl(
-    path: String,
-    fqn: Vec<String>,
+fn gen_fqn_by_path(path: &str) -> Vec<String> {
+    path.split("/").map(str::to_string).collect()
+}
+
+fn find_macro_impl<F: FileExplorer>(
+    path_prefix: &str,
+    lib_name: &str,
     res: &mut HashMap<String, (String, Vec<String>)>,
+    file_explorer: &F,
 ) {
-    let mut paths = std::fs::read_dir(path)
-        .unwrap()
-        .map(|res| res.unwrap())
-        .collect::<Vec<_>>();
-    paths.sort_by_key(|a| a.path());
-    for path in paths {
-        if path.file_type().unwrap().is_file() {
-            let filename = path.file_name();
-            let filename = filename.to_str().unwrap();
-            if let Some(filename) = filename.strip_suffix(".rs") {
-                let text = crate::read_from_file(path.path());
-                let mut text = text.as_str();
-                while let Some(pos) = text.find("#[macro_export]") {
-                    text = &text[pos..];
-                    let pos = text.find("macro_rules!").unwrap();
-                    text = &text[(pos + "macro_rules!".len())..];
-                    let pos = text.find('{').unwrap();
-                    let macro_name = &text[..pos].trim();
-                    let mut fqn = fqn.clone();
-                    fqn.push(filename.to_string());
-                    res.insert(
-                        macro_name.to_string(),
-                        (
-                            path.path().to_str().unwrap().replace('\\', "/").to_string(),
-                            fqn,
-                        ),
-                    );
-                }
-            }
-        } else if path.file_type().unwrap().is_dir() {
-            let mut fqn = fqn.clone();
-            fqn.push(path.file_name().to_str().unwrap().to_string());
-            find_macro_impl(path.path().to_str().unwrap().to_string(), fqn, res);
+    let rs_files = file_explorer.get_all_rs_files(&path_prefix);
+    for path in rs_files.iter() {
+        let full_text = file_explorer
+            .read_file(&format!("{}{}", path_prefix, path))
+            .concat()
+            .to_string();
+        let mut text = &full_text[..];
+        while let Some(pos) = text.find("#[macro_export]") {
+            text = &text[pos..];
+            let pos = text.find("macro_rules!").unwrap();
+            text = &text[(pos + "macro_rules!".len())..];
+            let pos = text.find('{').unwrap();
+            let macro_name = &text[..pos].trim();
+            let mut fqn = gen_fqn_by_path(path);
+            fqn.insert(0, lib_name.to_owned());
+            res.insert(
+                macro_name.to_string(),
+                (path.replace('\\', "/").to_string(), fqn),
+            );
         }
     }
 }
 
-fn find_macro(libraries: &[String]) -> HashMap<String, (String, Vec<String>)> {
+fn find_macro<F: FileExplorer>(
+    libraries: &[String],
+    file_explorer: &F,
+) -> HashMap<String, (String, Vec<String>)> {
     log("Find all macros...");
     let mut res = HashMap::new();
     for lib in libraries.iter() {
-        let root = format!("../{}/src", lib);
-        find_macro_impl(root, vec![lib.clone()], &mut res);
+        let root = format!("../{}/src/", lib);
+        find_macro_impl(&root, &lib, &mut res, file_explorer);
     }
     log(&format!("Found macros: {:?}", res));
     res
@@ -439,8 +435,11 @@ fn add_rerun_if_changed_instructions(libraries: &[String]) {
     }
 }
 
-pub fn build_several_libraries(libraries: &[String]) {
-    let all_macro = find_macro(libraries);
+pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
+    libraries: &[String],
+    file_explorer: &mut F,
+) -> Vec<String> {
+    let all_macro = find_macro(libraries, file_explorer);
     let mut all_code = find_usages_and_code(
         "src/main.rs",
         None,
@@ -448,6 +447,7 @@ pub fn build_several_libraries(libraries: &[String]) {
         &mut HashSet::new(),
         &all_macro,
         libraries,
+        file_explorer,
     );
     let mut code = Vec::new();
 
@@ -463,6 +463,13 @@ pub fn build_several_libraries(libraries: &[String]) {
     code.push("fn main() {".to_string());
     code.push("    crate::solution::submit();".to_string());
     code.push("}".to_string());
+    code
+}
+
+pub fn build_several_libraries(libraries: &[String]) {
+    let mut file_explorer = RealFileExplorer::new();
+    let code = build_several_libraries_impl(libraries, &mut file_explorer);
+
     crate::write_lines("../main/src/main.rs", code);
     add_rerun_if_changed_instructions(libraries);
 }

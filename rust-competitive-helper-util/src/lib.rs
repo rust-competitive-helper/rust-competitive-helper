@@ -1,4 +1,6 @@
 pub mod build;
+mod file_explorer;
+mod tests;
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
