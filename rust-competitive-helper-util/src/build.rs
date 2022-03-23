@@ -19,7 +19,7 @@ enum BuildResult {
 #[allow(unused)]
 fn log(msg: &str) {
     if env::var("LOG").is_ok() {
-        eprintln!("{}", msg);
+        println!("cargo:warning={}", msg);
     }
 }
 
@@ -267,6 +267,7 @@ fn find_usages_and_code<F: FileExplorer>(
                     .expect("expect ; in the end of `use` line, end of file found");
                 line += next_line.trim();
             }
+            log(&format!("In file {}, see line: {}", file, line));
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
                     if usage.tag == "crate" {
@@ -280,6 +281,7 @@ fn find_usages_and_code<F: FileExplorer>(
                     } else {
                         add_usages_to_code(&mut code, &usage, vec![], all_macro, libraries);
                     };
+                    // TODO: support `usage.tag` == "super"
                     if usage.tag == "crate" || libraries.contains(&usage.tag) {
                         log(&format!("fqn path = {:?}", fqn_path));
                         let library = if usage.tag == "crate" {

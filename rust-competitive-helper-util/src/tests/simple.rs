@@ -127,4 +127,44 @@ mod test {
         let expected = expect_file!["outputs/several_libs_main.rs"];
         expected.assert_eq(&gen_code(&mut file_explorer));
     }
+
+    #[test]
+    fn use_super() {
+        let mut file_explorer = FakeFileExplorer::new();
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+            use algo_lib::geometry::convex_polygon_intersection::convex_polygon_intersection;
+
+            pub fn submit() {
+                convex_polygon_intersection();
+            }
+        "#,
+        );
+        file_explorer.add_file(
+            "../algo_lib/src/geometry/convex_polygon_intersection.rs",
+            r#"
+
+            use super::half_plane_intersection::half_plane_intersection;
+
+            pub fn convex_polygon_intersection() {
+                half_plane_intersection();
+            }
+        "#,
+        );
+        // TODO: WARNING!
+        // Current generated output is NOT correct!
+        // this file should be recursively included in the generated [main.rs]
+        file_explorer.add_file(
+            "../algo_lib/src/geometry/half_plane_intersection.rs",
+            r#"
+
+            pub fn half_plane_intersection() {
+                // ...
+            }
+        "#,
+        );
+        let expected = expect_file!["outputs/use_super_main.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
 }
