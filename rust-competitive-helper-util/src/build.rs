@@ -315,7 +315,7 @@ fn find_usages_and_code<F: FileExplorer>(
                     unreachable!()
                 }
             }
-        } else if line.trim().starts_with("mod ") {
+        } else if line.trim().starts_with("mod ") && line.trim().ends_with(";") {
             // In case of multi-file solution, [main.rs] could register other files
             // with "mod ...;". As we put everything into one file, we don't need to
             // do it.

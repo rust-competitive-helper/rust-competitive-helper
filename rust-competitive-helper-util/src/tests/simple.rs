@@ -167,4 +167,53 @@ mod test {
         let expected = expect_file!["outputs/use_super_main.rs"];
         expected.assert_eq(&gen_code(&mut file_explorer));
     }
+
+    #[test]
+    fn several_files_in_solution() {
+        let mut file_explorer = FakeFileExplorer::new();
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+
+            mod helper;
+            use crate::helper::help;
+
+            pub fn submit() {
+                help();
+            }
+        "#,
+        );
+        file_explorer.add_file(
+            "src/helper.rs",
+            r#"
+            pub fn help() {
+                println!("Hello world!");
+            }
+        "#,
+        );
+        let expected = expect_file!["outputs/several_files_in_solution.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
+
+    #[test]
+    fn mod_inside_file() {
+        let mut file_explorer = FakeFileExplorer::new();
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+
+            pub fn submit() {
+                // ...
+            }
+
+            mod tests {
+                fn some_test() {
+
+                }
+            }
+        "#,
+        );
+        let expected = expect_file!["outputs/mod_inside_file.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
 }
