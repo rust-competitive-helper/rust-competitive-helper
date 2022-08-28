@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::{collections::HashMap, process::Command};
 
 use serde::{Deserialize, Serialize};
@@ -56,7 +57,7 @@ impl Config {
     pub fn run_open_task_command(
         &self,
         template_args: &HashMap<String, String>,
-    ) -> Result<std::process::Output, std::io::Error> {
+    ) -> Result<std::process::Output, String> {
         let terms: Vec<_> = self
             .open_task_command
             .iter()
@@ -68,6 +69,21 @@ impl Config {
                 s
             })
             .collect();
-        Command::new(&terms[0]).args(&terms[1..]).output()
+        Command::new(&terms[0])
+            .args(&terms[1..])
+            .output()
+            .map_err(|err| {
+                format!(
+                    "'{}': check config file", // TODO provide path for config file, confy-0.5 will have get_configuration_file_path
+                    match err.kind() {
+                        std::io::ErrorKind::NotFound => format!("{} not found", &terms[0]),
+                        _ => format!(
+                            "Couldn't run command '{}': {}",
+                            terms.iter().map(|arg| format!("\"{}\"", arg)).join(" "),
+                            err
+                        ),
+                    }
+                )
+            })
     }
 }
