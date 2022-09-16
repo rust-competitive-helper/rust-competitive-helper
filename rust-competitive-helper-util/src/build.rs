@@ -248,11 +248,11 @@ fn find_usages_and_code<F: FileExplorer>(
 
     let mut lines = file_explorer.read_file(file).into_iter();
     while let Some(mut line) = lines.next() {
-        if line.as_str() == "//START MAIN" {
+        if line.contains("//START MAIN") {
             main = true;
             continue;
         }
-        if line.as_str() == "//END MAIN" {
+        if line.contains("//END MAIN") {
             main = false;
             continue;
         }
