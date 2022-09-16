@@ -99,21 +99,30 @@ pub fn get_io_settings(task: &Task) -> String {
     )
 }
 
-pub fn create(task: Task) {
-    let config = Config::load();
-    let name = task_name(&task);
+fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     for l in read_lines("Cargo.toml") {
-        if l.contains(format!("\"{}\"", name).as_str()) {
-            eprintln!("Task {} exists", name);
-            return;
+        if l.contains(format!("\"{}\"", task_name).as_str()) {
+            eprintln!("Task {} exists", task_name);
+            return None;
         }
         lines.push(l.clone());
         if l.as_str() == "members = [" {
-            lines.push(format!("    \"{}\",", name));
+            lines.push(format!("    \"{}\",", task_name));
         }
     }
-    write_lines("Cargo.toml", lines);
+    return Some(lines);
+}
+
+pub fn create(task: Task) {
+    let config = Config::load();
+    let name = task_name(&task);
+
+    let new_cargo_toml_content = match generate_new_cargo_toml_content(&name) {
+        Some(content) => content,
+        None => return,
+    };
+
     fs::create_dir_all(format!("{}/src", name)).unwrap();
     fs::create_dir_all(format!("{}/tests", name)).unwrap();
     for (i, test) in task.tests.iter().enumerate() {
@@ -155,7 +164,9 @@ pub fn create(task: Task) {
     let mut toml = read_from_file("templates/Cargo.toml");
     toml = toml.replace("$TASK", name.as_str());
     write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
-    println!("Task {} parsed", name);
+
+    write_lines("Cargo.toml", new_cargo_toml_content);
+    println!("Task {} parsed!", name);
 
     let open_task_result = {
         let mut templates_args: HashMap<String, String> = HashMap::new();
