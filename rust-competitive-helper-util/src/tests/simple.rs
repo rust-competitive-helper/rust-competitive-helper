@@ -11,6 +11,7 @@ mod test {
         build_several_libraries_impl(
             &["algo_lib".to_owned(), "marathon_utils".to_owned()],
             file_explorer,
+            false,
         )
         .join("\n")
     }

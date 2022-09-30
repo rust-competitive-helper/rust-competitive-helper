@@ -239,6 +239,7 @@ fn find_usages_and_code<F: FileExplorer>(
     all_macro: &HashMap<String, (String, Vec<String>)>,
     libraries: &[String],
     file_explorer: &F,
+    minimize: bool,
 ) -> Vec<CodeFile> {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
@@ -305,6 +306,7 @@ fn find_usages_and_code<F: FileExplorer>(
                                     all_macro,
                                     libraries,
                                     file_explorer,
+                                    minimize,
                                 );
                                 all_code.extend(call_code);
                             }
@@ -320,7 +322,12 @@ fn find_usages_and_code<F: FileExplorer>(
             // with "mod ...;". As we put everything into one file, we don't need to
             // do it.
         } else {
-            code.push(line.clone());
+            let line = if minimize {
+                line.trim().to_owned()
+            } else {
+                line
+            };
+            code.push(line);
         }
     }
 
@@ -448,6 +455,7 @@ fn add_rerun_if_changed_instructions(libraries: &[String]) {
 pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
     libraries: &[String],
     file_explorer: &mut F,
+    minimize: bool,
 ) -> Vec<String> {
     let all_macro = find_macro(libraries, file_explorer);
     let mut all_code = find_usages_and_code(
@@ -458,6 +466,7 @@ pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
         &all_macro,
         libraries,
         file_explorer,
+        minimize,
     );
     let mut code = Vec::new();
 
@@ -476,14 +485,14 @@ pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
     code
 }
 
-pub fn build_several_libraries(libraries: &[String]) {
+pub fn build_several_libraries(libraries: &[String], minimize: bool) {
     let mut file_explorer = RealFileExplorer::new();
-    let code = build_several_libraries_impl(libraries, &mut file_explorer);
+    let code = build_several_libraries_impl(libraries, &mut file_explorer, minimize);
 
     crate::write_lines("../main/src/main.rs", code);
     add_rerun_if_changed_instructions(libraries);
 }
 
 pub fn build() {
-    build_several_libraries(&vec!["algo_lib".to_owned()]);
+    build_several_libraries(&vec!["algo_lib".to_owned()], false);
 }

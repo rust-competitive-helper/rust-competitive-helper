@@ -107,6 +107,22 @@ where
     res
 }
 
+pub fn all_rs_files_in_dir<P>(path: P) -> Vec<String>
+where
+    P: AsRef<Path> + Display,
+{
+    let mut res = Vec::new();
+    for path in fs::read_dir(path).unwrap() {
+        let path = path.unwrap();
+        if let Some(path_str) = path.file_name().to_str() {
+            if path_str.ends_with("rs") {
+                res.push(path_str.to_owned());
+            }
+        }
+    }
+    res
+}
+
 pub fn write_to_file<P: AsRef<Path>, C: Into<String>>(filename: P, content: C) {
     fs::write(filename, content.into()).unwrap();
 }
