@@ -142,9 +142,9 @@ pub fn create(task: Task) {
     }
 }
 
-fn select_name() -> String {
+fn select_name(prompt: &str) -> String {
     Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Task name:")
+        .with_prompt(format!("{} name:", prompt))
         .interact_on(&Term::stdout())
         .unwrap()
 }
@@ -227,10 +227,10 @@ fn select_output_type() -> IOType {
 }
 
 pub fn create_task_wizard() {
-    let name = select_name();
+    let name = select_name("Task");
     let task = Task {
         name: name.clone(),
-        group: "Manual".to_string(),
+        group: select_name("Group"),
         url: "".to_string(),
         interactive: false,
         time_limit: 2000,
