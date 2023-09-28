@@ -1,4 +1,4 @@
-use crate::{read_lines, IOEnum, Task};
+use crate::{read_lines, IOEnum, Task, read_from_file};
 use std::collections::{HashMap, HashSet};
 
 const LIB_NAME: &str = "algo_lib";
@@ -365,35 +365,17 @@ pub fn build() {
     let mut code = Vec::new();
     all_code.sort();
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
-    code.push("fn main() {".to_string());
+    let mut main = read_from_file("../templates/main/main.rs");
     let task = task.unwrap();
     match task.input.io_type {
-        IOEnum::StdIn | IOEnum::Regex => {
-            code.push("    let mut sin = std::io::stdin();".to_string());
-            if task.interactive {
-                code.push(
-                    "    let input = crate::io::input::Input::new_with_size(&mut sin, 1);"
-                        .to_string(),
-                );
-            } else {
-                code.push("    let input = crate::io::input::Input::new(&mut sin);".to_string());
-            }
+        IOEnum::StdIn => {
+            main = main.replace("$INPUT", read_from_file("../templates/main/stdin.rs").as_str());
+        }
+        IOEnum::Regex => {
+            main = main.replace("$INPUT", read_from_file("../templates/main/regex.rs").as_str());
         }
         IOEnum::File => {
-            code.push(format!(
-                "    let mut in_file = std::fs::File::open(\"{}\").unwrap();",
-                task.input.file_name.unwrap()
-            ));
-            if task.interactive {
-                code.push(
-                    "    let input = crate::io::input::Input::new_with_size(&mut in_file, 1);"
-                        .to_string(),
-                );
-            } else {
-                code.push(
-                    "    let input = crate::io::input::Input::new(&mut in_file);".to_string(),
-                );
-            }
+            main = main.replace("$INPUT", read_from_file("../templates/main/file_in.rs").as_str());
         }
         _ => {
             unreachable!()
@@ -401,41 +383,26 @@ pub fn build() {
     }
     match task.output.io_type {
         IOEnum::StdOut => {
-            code.push("    unsafe {".to_string());
-            if task.interactive {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(std::io::stdout())));".to_string()
-                );
-            } else {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(std::io::stdout())));".to_string()
-                );
-            }
-            code.push("    }".to_string());
+            main = main.replace("$OUTPUT", read_from_file("../templates/main/stdout.rs").as_str());
         }
         IOEnum::File => {
-            code.push(format!(
-                "    let out_file = std::fs::File::create(\"{}\").unwrap();",
-                task.output.file_name.unwrap()
-            ));
-            code.push("    unsafe {".to_string());
-            if task.interactive {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new_with_auto_flush(Box::new(out_file)));".to_string()
-                );
-            } else {
-                code.push(
-                    "        crate::io::output::OUTPUT = Some(crate::io::output::Output::new(Box::new(out_file)));".to_string()
-                );
-            }
-            code.push("    }".to_string());
+            main = main.replace("$OUTPUT", read_from_file("../templates/main/file_out.rs").as_str());
         }
         _ => {
             unreachable!()
         }
     }
-    code.push("    crate::solution::run(input);".to_string());
-    code.push("}".to_string());
+    main = main.replace("$INTERACTIVE", task.interactive.to_string().as_str());
+    if let Some(in_file) = task.input.file_name {
+        main = main.replace("$IN_FILE", in_file.as_str());
+    }
+    if let Some(pattern) = task.input.pattern {
+        main = main.replace("$PATTERN", pattern.as_str());
+    }
+    if let Some(out_file) = task.output.file_name {
+        main = main.replace("$OUT_FILE", out_file.as_str());
+    }
+    code.push(main);
     crate::write_lines("../main/src/main.rs", code);
     add_rerun_if_changed_instructions();
 }
