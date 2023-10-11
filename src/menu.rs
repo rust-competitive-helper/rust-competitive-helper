@@ -1,9 +1,9 @@
-use crate::{archiver, listener, task_creator};
+use crate::{archiver, listener, submit, task_creator};
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 
-const OPTIONS: [&str; 4] = ["Run listener", "Create new task", "Archive tasks", "Exit"];
+const OPTIONS: [&str; 5] = ["Run listener", "Submit", "Create new task", "Archive tasks", "Exit"];
 
 pub fn run_menu() {
     loop {
@@ -18,12 +18,15 @@ pub fn run_menu() {
                 listener::listen();
             }
             1 => {
-                task_creator::create_task_wizard();
+                submit::submit();
             }
             2 => {
-                archiver::archive();
+                task_creator::create_task_wizard();
             }
             3 => {
+                archiver::archive();
+            }
+            4 => {
                 return;
             }
             _ => unreachable!(),

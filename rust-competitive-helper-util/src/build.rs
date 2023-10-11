@@ -362,11 +362,12 @@ pub fn build() {
         &mut HashSet::new(),
         &all_macro,
     );
+    let task = task.unwrap();
     let mut code = Vec::new();
+    code.push(format!("// {}", task.url));
     all_code.sort();
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
     let mut main = read_from_file("../templates/main/main.rs");
-    let task = task.unwrap();
     match task.input.io_type {
         IOEnum::StdIn => {
             main = main.replace("$INPUT", read_from_file("../templates/main/stdin.rs").as_str());
