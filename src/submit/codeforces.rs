@@ -4,18 +4,26 @@ use crossterm::style::SetForegroundColor;
 use crossterm::style::Color;
 use crossterm::style::ResetColor;
 
+// Url should be https://codeforces.com/$contest_type/$contest_id/problem/$problem_id
 pub(crate) fn submit(url: &str) {
-    let is_gym = url.contains("/gym/");
-    let contest_id = url.split('/').nth(4).unwrap().parse::<u32>().unwrap();
-    let problem_id = url.split('/').nth(6).unwrap();
+    let url_regex = Regex::new(r#"https://codeforces.com/(\w+)/(\d+)/problem/(\w+)"#).unwrap();
+    let (contest_type, contest_id, problem_id) = {
+        match url_regex.captures(url) {
+            None => {
+                failure("Unexpected URL for codeforces problem");
+                return;
+            }
+            Some(caps) => (caps[1].to_string(), caps[2].to_string().parse::<u32>().unwrap(), caps[3].to_string()),
+        }
+    };
     let mut client = client::WebClient::new();
     if let Err(_) = client.login() {
         return;
     }
-    if let Ok(id) = client.submit(contest_id, problem_id, is_gym) {
+    if let Ok(id) = client.submit(contest_id, &problem_id, &contest_type) {
         let mut last_len = 0;
         loop {
-            if let Ok(body) = client.get_url(&format!("https://codeforces.com/{}/{}/submission/{}", if is_gym { "gym" } else { "contest" }, contest_id, id)) {
+            if let Ok(body) = client.get_url(&format!("https://codeforces.com/{}/{}/submission/{}", contest_type, contest_id, id)) {
                 let outcome = Regex::new(r#"<span class='verdict-(\w*)'>(([^<]|<s)*)</span>"#).unwrap();
                 let caps = outcome.captures(&body).unwrap();
                 let outcome_type = caps[1].to_string();
@@ -60,12 +68,11 @@ fn success(s: &str) -> usize {
     s.len()
 }
 
-fn failure(s: &str) -> usize {
+fn failure(s: &str) {
     let mut stdout = std::io::stdout();
     let _ = execute!(stdout, SetForegroundColor(Color::Red));
     println!("{s}");
     let _ = execute!(stdout, ResetColor);
-    s.len()
 }
 
 fn pending(s: &str) -> usize {
@@ -88,8 +95,9 @@ mod client {
     use dialoguer::theme::ColorfulTheme;
     use crate::submit::codeforces::{failure, success};
 
-
-    const SESSION_FILE: &str = "~/.config/rust-competitive-helper/codeforces.session";
+    fn session_file() -> String {
+        std::env::var("HOME").unwrap() + "/.config/rust-competitive-helper/codeforces.session"
+    }
 
     pub struct WebClient {
         client: reqwest::blocking::Client,
@@ -100,8 +108,8 @@ mod client {
 
     impl Drop for WebClient {
         fn drop(&mut self) {
-            create_dir_all("~/.config/rust-competitive-helper/").unwrap();
-            let mut file = File::create(SESSION_FILE)
+            create_dir_all(session_file().rsplit_once('/').unwrap().0).unwrap();
+            let mut file = File::create(session_file())
                 .map(std::io::BufWriter::new)
                 .unwrap();
             let cookies = self.cookies.lock().unwrap();
@@ -114,7 +122,7 @@ mod client {
     impl WebClient {
         pub fn new() -> WebClient {
             let cookie_store = {
-                let store = File::open(SESSION_FILE);
+                let store = File::open(session_file());
                 let file = store.map(std::io::BufReader::new);
                 match file {
                     Ok(file) => cookie_store::CookieStore::load_json(file).unwrap(),
@@ -201,8 +209,6 @@ mod client {
             Ok(caps[1].to_string())
         }
 
-        // TODO: Return status code?
-        // TODO: Block redir?
         pub fn get_url(&mut self, url: &str) -> Result<String, CFToolError> {
             self.set_rcpc()?;
 
@@ -315,7 +321,7 @@ mod client {
             Ok(())
         }
 
-        pub fn submit(&mut self, contest_id: u32, problem_id: &str, is_gym: bool) -> Result<String, CFToolError> {
+        pub fn submit(&mut self, contest_id: u32, problem_id: &str, contest_type: &str) -> Result<String, CFToolError> {
             println!("Submitting {} {}", contest_id, problem_id);
 
             let mut file = File::open("./main/src/main.rs").unwrap();
@@ -323,7 +329,7 @@ mod client {
 
             file.read_to_string(&mut source_code).unwrap();
 
-            let submit_url = format!("https://codeforces.com/{}/{}/submit", if is_gym { "gym" } else { "contest" }, contest_id);
+            let submit_url = format!("https://codeforces.com/{}/{}/submit", contest_type, contest_id);
             let body = self.post_url_submit(
                 &submit_url,
                 &submit_url,
@@ -375,7 +381,6 @@ mod client {
 
     impl fmt::Display for CFToolError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            // TODO: More output
             write!(f, "CFToolError")
         }
     }
