@@ -10,6 +10,8 @@ pub trait FileExplorer {
     // returns list of relative paths
     // [path_prefix] should end with '/'
     fn get_all_rs_files(&self, path_prefix: &str) -> Vec<String>;
+
+    fn file_exists(&self, path: &str) -> bool;
 }
 
 pub struct RealFileExplorer {}
@@ -19,6 +21,7 @@ impl RealFileExplorer {
         Self {}
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn get_all_rs_files_impl(
         &self,
         path_prefix: &str,
@@ -58,6 +61,10 @@ impl FileExplorer for RealFileExplorer {
         self.get_all_rs_files_impl(path_prefix, "", &mut result);
         result.into_iter().collect()
     }
+
+    fn file_exists(&self, path: &str) -> bool {
+        std::path::Path::new(path).exists()
+    }
 }
 
 pub struct FakeFileExplorer {
@@ -78,6 +85,10 @@ impl FileExplorer for FakeFileExplorer {
             .filter_map(|name| name.strip_prefix(path_prefix))
             .map(str::to_string)
             .collect()
+    }
+
+    fn file_exists(&self, path: &str) -> bool {
+        self.files.contains_key(path)
     }
 }
 

@@ -111,7 +111,7 @@ fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
             lines.push(format!("    \"{}\",", task_name));
         }
     }
-    return Some(lines);
+    Some(lines)
 }
 
 pub fn create(task: Task) {

@@ -217,4 +217,59 @@ mod test {
         let expected = expect_file!["outputs/mod_inside_file.rs"];
         expected.assert_eq(&gen_code(&mut file_explorer));
     }
+
+    fn add_new_io_templates(file_explorer: &mut FakeFileExplorer) {
+        file_explorer.add_file(
+            "../templates/main/main.rs",
+            r#"
+        fn main() {
+            $INPUT
+            $OUTPUT
+                crate::solution::run(input, output);
+        }
+        "#,
+        );
+
+        file_explorer.add_file(
+            "../templates/main/stdin.rs",
+            r#"
+            let mut sin = std::io::stdin();
+            let input = if $INTERACTIVE {
+                crate::io::input::Input::new_with_size(&mut sin, 1)
+            } else {
+                crate::io::input::Input::new(&mut sin)
+            };
+            "#,
+        );
+
+        file_explorer.add_file(
+            "../templates/main/stdout.rs",
+            r#"
+            let mut stdout = std::io::stdout();
+            let output = if $INTERACTIVE {
+                crate::io::output::Output::new_with_auto_flush(&mut stdout)
+            } else {
+                crate::io::output::Output::new(&mut stdout)
+            };
+            "#,
+        );
+    }
+
+    #[test]
+    fn new_io_templates() {
+        let mut file_explorer = FakeFileExplorer::new();
+        add_new_io_templates(&mut file_explorer);
+        file_explorer.add_file(
+            "src/main.rs",
+            r#"
+            //{"name":"d","group":"Manual","url":"","interactive":false,"timeLimit":2000,"tests":[{"input":"","output":""},{"input":"","output":""}],"testType":"single","input":{"type":"stdin","fileName":null,"pattern":null},"output":{"type":"stdout","fileName":null,"pattern":null},"languages":{"java":{"taskClass":"d"}}}
+
+            pub fn run(mut input: Input, mut output: Output) {
+                println!("Hello world!");
+            }
+        "#,
+        );
+        let expected = expect_file!["outputs/new_io_templates.rs"];
+        expected.assert_eq(&gen_code(&mut file_explorer));
+    }
 }

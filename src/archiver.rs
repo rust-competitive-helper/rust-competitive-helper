@@ -23,7 +23,7 @@ fn contest_list() -> Vec<(String, Vec<String>)> {
             continue;
         }
         let line = line.trim().as_bytes();
-        let task_name = String::from_utf8_lossy(&(line[1..line.len() - 2].to_vec())).to_string();
+        let task_name = String::from_utf8_lossy(&line[1..line.len() - 2]).to_string();
         let main = fs::File::open(format!("{}/src/main.rs", task_name));
         if main.is_err() {
             continue;

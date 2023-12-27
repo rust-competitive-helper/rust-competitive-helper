@@ -1,4 +1,7 @@
-use crate::file_explorer::{FileExplorer, RealFileExplorer};
+use crate::{
+    file_explorer::{FileExplorer, RealFileExplorer},
+    IOEnum, Task,
+};
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -231,6 +234,7 @@ fn add_usages_to_code(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn find_usages_and_code<F: FileExplorer>(
     file: &str,
     current_lib: Option<String>,
@@ -317,7 +321,7 @@ fn find_usages_and_code<F: FileExplorer>(
                     unreachable!()
                 }
             }
-        } else if line.trim().starts_with("mod ") && line.trim().ends_with(";") {
+        } else if line.trim().starts_with("mod ") && line.trim().ends_with(';') {
             // In case of multi-file solution, [main.rs] could register other files
             // with "mod ...;". As we put everything into one file, we don't need to
             // do it.
@@ -388,7 +392,7 @@ fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut V
 }
 
 fn gen_fqn_by_path(path: &str) -> Vec<String> {
-    path.split("/")
+    path.split('/')
         .map(|s| s.strip_suffix(".rs").unwrap_or(s))
         .map(str::to_string)
         .collect()
@@ -400,7 +404,7 @@ fn find_macro_impl<F: FileExplorer>(
     res: &mut HashMap<String, (String, Vec<String>)>,
     file_explorer: &F,
 ) {
-    let rs_files = file_explorer.get_all_rs_files(&path_prefix);
+    let rs_files = file_explorer.get_all_rs_files(path_prefix);
     for path in rs_files.iter() {
         let full_text = file_explorer
             .read_file(&format!("{}{}", path_prefix, path))
@@ -436,7 +440,7 @@ fn find_macro<F: FileExplorer>(
     let mut res = HashMap::new();
     for lib in libraries.iter() {
         let root = format!("../{}/src/", lib);
-        find_macro_impl(&root, &lib, &mut res, file_explorer);
+        find_macro_impl(&root, lib, &mut res, file_explorer);
     }
     log(&format!("Found macros: {:?}", res));
     res
@@ -452,9 +456,72 @@ fn add_rerun_if_changed_instructions(libraries: &[String]) {
     }
 }
 
+fn parse_task<F: FileExplorer>(file_explorer: &F) -> Task {
+    // Task json should be written in the first line of the main.rs
+    let first_line = file_explorer
+        .read_file("src/main.rs")
+        .into_iter()
+        .find(|s| !s.trim().is_empty())
+        .unwrap();
+    let first_line = first_line.trim();
+    assert!(first_line.starts_with("//"));
+    let first_line = &first_line[2..];
+    serde_json::from_str::<Task>(first_line)
+        .unwrap_or_else(|_| panic!("Can't parse task from: {}", first_line))
+}
+
+fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
+    if !file_explorer.file_exists("../templates/main/main.rs") {
+        // fallback to the old mode
+        return "fn main() {\n    crate::solution::submit();\n}".to_string();
+    }
+
+    let read_file = |filename: &str| -> String { file_explorer.read_file(filename).join("\n") };
+
+    let mut main = read_file("../templates/main/main.rs");
+    let task = parse_task(file_explorer);
+
+    match task.input.io_type {
+        IOEnum::StdIn => {
+            main = main.replace("$INPUT", &read_file("../templates/main/stdin.rs"));
+        }
+        IOEnum::Regex => {
+            main = main.replace("$INPUT", &read_file("../templates/main/regex.rs"));
+        }
+        IOEnum::File => {
+            main = main.replace("$INPUT", &read_file("../templates/main/file_in.rs"));
+        }
+        IOEnum::StdOut => {
+            unreachable!()
+        }
+    }
+    match task.output.io_type {
+        IOEnum::StdOut => {
+            main = main.replace("$OUTPUT", &read_file("../templates/main/stdout.rs"));
+        }
+        IOEnum::File => {
+            main = main.replace("$OUTPUT", &read_file("../templates/main/file_out.rs"));
+        }
+        IOEnum::Regex | IOEnum::StdIn => {
+            unreachable!()
+        }
+    }
+    main = main.replace("$INTERACTIVE", task.interactive.to_string().as_str());
+    if let Some(in_file) = task.input.file_name {
+        main = main.replace("$IN_FILE", in_file.as_str());
+    }
+    if let Some(pattern) = task.input.pattern {
+        main = main.replace("$PATTERN", pattern.as_str());
+    }
+    if let Some(out_file) = task.output.file_name {
+        main = main.replace("$OUT_FILE", out_file.as_str());
+    }
+    main
+}
+
 pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
     libraries: &[String],
-    file_explorer: &mut F,
+    file_explorer: &F,
     minimize: bool,
 ) -> Vec<String> {
     let all_macro = find_macro(libraries, file_explorer);
@@ -479,20 +546,19 @@ pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
         (is_library_code, code_file.clone())
     });
     build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
-    code.push("fn main() {".to_string());
-    code.push("    crate::solution::submit();".to_string());
-    code.push("}".to_string());
+    let main = build_main_fun(file_explorer);
+    code.push(main);
     code
 }
 
 pub fn build_several_libraries(libraries: &[String], minimize: bool) {
-    let mut file_explorer = RealFileExplorer::new();
-    let code = build_several_libraries_impl(libraries, &mut file_explorer, minimize);
+    let file_explorer = RealFileExplorer::new();
+    let code = build_several_libraries_impl(libraries, &file_explorer, minimize);
 
     crate::write_lines("../main/src/main.rs", code);
     add_rerun_if_changed_instructions(libraries);
 }
 
 pub fn build() {
-    build_several_libraries(&vec!["algo_lib".to_owned()], false);
+    build_several_libraries(&["algo_lib".to_owned()], false);
 }
