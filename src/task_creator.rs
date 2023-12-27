@@ -170,6 +170,7 @@ pub fn create(task: Task) {
 
     let open_task_result = {
         let mut templates_args: HashMap<String, String> = HashMap::new();
+        templates_args.insert("$NAME".to_owned(), name.clone());
         templates_args.insert("$LINE".to_owned(), row.to_string());
         templates_args.insert("$COLUMN".to_owned(), col.to_string());
         templates_args.insert("$FILE".to_owned(), format!("{}/src/main.rs", name));
