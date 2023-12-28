@@ -1,7 +1,11 @@
-use crate::{read_lines, IOEnum, Task, read_from_file};
-use std::collections::{HashMap, HashSet};
-
-const LIB_NAME: &str = "algo_lib";
+use crate::{
+    file_explorer::{FileExplorer, RealFileExplorer},
+    IOEnum, Task,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
 
 #[derive(Debug)]
 struct UsageTree {
@@ -13,6 +17,13 @@ struct UsageTree {
 enum BuildResult {
     Usage(UsageTree),
     Children(Vec<UsageTree>),
+}
+
+#[allow(unused)]
+fn log(msg: &str) {
+    if env::var("LOG").is_ok() {
+        println!("cargo:warning={}", msg);
+    }
 }
 
 fn build_use_tree(usage: &str) -> BuildResult {
@@ -27,7 +38,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
             } else if usage[i] == '}' {
                 level -= 1;
             } else if usage[i] == ',' && level == 0usize {
-                match build_use_tree(usage[start..i].iter().cloned().collect::<String>().as_str()) {
+                match build_use_tree(usage[start..i].iter().collect::<String>().as_str()) {
                     BuildResult::Usage(usage) => {
                         res.push(usage);
                     }
@@ -60,7 +71,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
     } else {
         match usage.iter().position(|&r| r == ':') {
             None => BuildResult::Usage(UsageTree {
-                tag: usage.iter().cloned().collect(),
+                tag: usage.iter().collect(),
                 children: Vec::new(),
             }),
             Some(pos) => {
@@ -77,7 +88,7 @@ fn build_use_tree(usage: &str) -> BuildResult {
                     BuildResult::Children(children) => children,
                 };
                 BuildResult::Usage(UsageTree {
-                    tag: usage[..pos].iter().cloned().collect(),
+                    tag: usage[..pos].iter().collect(),
                     children,
                 })
             }
@@ -138,7 +149,12 @@ fn all_files_impl(
     for usage in usages.iter() {
         if usage.children.is_empty() {
             if root {
-                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap();
+                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap_or_else(|| {
+                    panic!(
+                        "Expected macro, but couldn't find its defintion. {:?}",
+                        usage.tag
+                    )
+                });
                 res.push((file_name.clone(), fqn.clone()));
             } else {
                 add = true;
@@ -165,45 +181,83 @@ fn all_files_impl(
 fn all_files(
     usage_tree: &UsageTree,
     all_macro: &HashMap<String, (String, Vec<String>)>,
+    library: &Option<String>,
 ) -> Vec<(String, Vec<String>)> {
-    all_files_impl(
-        &usage_tree.children,
-        format!("../{}/src", LIB_NAME),
-        Vec::new(),
-        true,
-        all_macro,
-    )
+    let (prefix, fqn_path) = match library {
+        Some(library) => (format!("../{}/src", library), vec![library.clone()]),
+        None => ("src".to_owned(), vec![]),
+    };
+    all_files_impl(&usage_tree.children, prefix, fqn_path, true, all_macro)
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 struct CodeFile {
     fqn: Vec<String>,
     content: Vec<String>,
 }
 
-fn find_usages_and_code(
+// Inside solution we replace:
+// ``use algo_lib::`` with ``use crate::algo_lib``
+//
+// Inside [algo_lib] we replace
+// ``use crate::`` with ``use crate::algo_lib``
+//
+// Also special case for macros, we replace them with
+// ``use crate::*macro*``
+//
+fn add_usages_to_code(
+    code: &mut Vec<String>,
+    usage_tree: &UsageTree,
+    mut path: Vec<String>,
+    all_macro: &HashMap<String, (String, Vec<String>)>,
+    libraries: &[String],
+) {
+    path.push(usage_tree.tag.clone());
+    if usage_tree.children.is_empty() {
+        if !path.is_empty() && libraries.contains(&path[0]) {
+            if path.len() == 2 && all_macro.contains_key(&path[1]) {
+                // special case for macros
+                code.push(format!("use crate::{};", path[1]));
+            } else {
+                code.push(format!("use crate::{};", path.join("::")));
+            }
+        } else {
+            // common code (e.g. standard library)
+            // also multi-file solutions goes this path
+            // with path[0] == "crate"
+            code.push(format!("use {};", path.join("::")));
+        }
+    } else {
+        for child in usage_tree.children.iter() {
+            add_usages_to_code(code, child, path.clone(), all_macro, libraries)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn find_usages_and_code<F: FileExplorer>(
     file: &str,
-    prefix: &str,
+    current_lib: Option<String>,
     fqn_path: Vec<String>,
     processed: &mut HashSet<String>,
     all_macro: &HashMap<String, (String, Vec<String>)>,
-) -> (Vec<CodeFile>, Option<Task>) {
+    libraries: &[String],
+    file_explorer: &F,
+    minimize: bool,
+) -> Vec<CodeFile> {
     let mut code = Vec::new();
     let mut all_code = Vec::new();
     let mut main = false;
-    let mut task = None;
 
-    let mut lines = read_lines(file).into_iter();
-    if prefix == LIB_NAME {
-        let task_json = lines.next().unwrap().chars().skip(2).collect::<String>();
-        task = Some(serde_json::from_str::<Task>(task_json.as_str()).unwrap());
-    }
+    log(&format!("Parsing file {}...", file));
+
+    let mut lines = file_explorer.read_file(file).into_iter();
     while let Some(mut line) = lines.next() {
-        if line.as_str() == "//START MAIN" {
+        if line.contains("//START MAIN") {
             main = true;
             continue;
         }
-        if line.as_str() == "//END MAIN" {
+        if line.contains("//END MAIN") {
             main = false;
             continue;
         }
@@ -218,20 +272,45 @@ fn find_usages_and_code(
                     .expect("expect ; in the end of `use` line, end of file found");
                 line += next_line.trim();
             }
-            code.push(line.replace(LIB_NAME, "crate"));
+            log(&format!("In file {}, see line: {}", file, line));
             match build_use_tree_full_line(&line) {
                 BuildResult::Usage(usage) => {
-                    if usage.tag.as_str() == prefix {
-                        let all = all_files(&usage, all_macro);
+                    if usage.tag == "crate" {
+                        let path = match &current_lib {
+                            None => vec!["crate".to_owned()],
+                            Some(lib) => vec![lib.clone()],
+                        };
+                        for child in usage.children.iter() {
+                            add_usages_to_code(&mut code, child, path.clone(), all_macro, libraries)
+                        }
+                    } else {
+                        add_usages_to_code(&mut code, &usage, vec![], all_macro, libraries);
+                    };
+                    // TODO: support `usage.tag` == "super"
+                    if usage.tag == "crate" || libraries.contains(&usage.tag) {
+                        log(&format!("fqn path = {:?}", fqn_path));
+                        let library = if usage.tag == "crate" {
+                            current_lib.clone()
+                        } else {
+                            Some(usage.tag.clone())
+                        };
+                        let all = all_files(&usage, all_macro, &library);
+                        log(&format!(
+                            "Usage: {:?}, need to check recursively: {:?}",
+                            &usage, all
+                        ));
                         for (file, fqn_path) in all {
                             if !processed.contains(&file) {
                                 processed.insert(file.clone());
-                                let (call_code, ..) = find_usages_and_code(
+                                let call_code = find_usages_and_code(
                                     file.as_str(),
-                                    "crate",
+                                    library.clone(),
                                     fqn_path,
                                     processed,
                                     all_macro,
+                                    libraries,
+                                    file_explorer,
+                                    minimize,
                                 );
                                 all_code.extend(call_code);
                             }
@@ -242,8 +321,17 @@ fn find_usages_and_code(
                     unreachable!()
                 }
             }
+        } else if line.trim().starts_with("mod ") && line.trim().ends_with(';') {
+            // In case of multi-file solution, [main.rs] could register other files
+            // with "mod ...;". As we put everything into one file, we don't need to
+            // do it.
         } else {
-            code.push(line.clone());
+            let line = if minimize {
+                line.trim().to_owned()
+            } else {
+                line
+            };
+            code.push(line);
         }
     }
 
@@ -252,10 +340,17 @@ fn find_usages_and_code(
         fqn: fqn_path,
     });
 
-    (all_code, task)
+    all_code
 }
 
 fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut Vec<String>) {
+    if prefix.is_empty() {
+        log("Build code:");
+        for code_file in to_add.iter() {
+            log(&format!("{:?}", code_file.fqn));
+        }
+    }
+
     if to_add[0].fqn == prefix {
         if prefix.is_empty() {
             code.push("pub mod solution {".to_string());
@@ -296,100 +391,118 @@ fn build_code(mut prefix: Vec<String>, mut to_add: &mut [CodeFile], code: &mut V
     }
 }
 
-fn find_macro_impl(
-    path: String,
-    fqn: Vec<String>,
+fn gen_fqn_by_path(path: &str) -> Vec<String> {
+    path.split('/')
+        .map(|s| s.strip_suffix(".rs").unwrap_or(s))
+        .map(str::to_string)
+        .collect()
+}
+
+fn find_macro_impl<F: FileExplorer>(
+    path_prefix: &str,
+    lib_name: &str,
     res: &mut HashMap<String, (String, Vec<String>)>,
+    file_explorer: &F,
 ) {
-    let mut paths = std::fs::read_dir(path)
-        .unwrap()
-        .map(|res| res.unwrap())
-        .collect::<Vec<_>>();
-    paths.sort_by_key(|a| a.path());
-    for path in paths {
-        if path.file_type().unwrap().is_file() {
-            let filename = path.file_name();
-            let filename = filename.to_str().unwrap();
-            if let Some(filename) = filename.strip_suffix(".rs") {
-                let text = crate::read_from_file(path.path());
-                let mut text = text.as_str();
-                while let Some(pos) = text.find("#[macro_export]") {
-                    text = &text[pos..];
-                    let pos = text.find("macro_rules!").unwrap();
-                    text = &text[(pos + "macro_rules!".len())..];
-                    let pos = text.find('{').unwrap();
-                    let macro_name = &text[..pos].trim();
-                    let mut fqn = fqn.clone();
-                    fqn.push(filename.to_string());
-                    res.insert(
-                        macro_name.to_string(),
-                        (
-                            path.path().to_str().unwrap().replace('\\', "/").to_string(),
-                            fqn,
-                        ),
-                    );
-                }
-            }
-        } else if path.file_type().unwrap().is_dir() {
-            let mut fqn = fqn.clone();
-            fqn.push(path.file_name().to_str().unwrap().to_string());
-            find_macro_impl(path.path().to_str().unwrap().to_string(), fqn, res);
+    let rs_files = file_explorer.get_all_rs_files(path_prefix);
+    for path in rs_files.iter() {
+        let full_text = file_explorer
+            .read_file(&format!("{}{}", path_prefix, path))
+            .concat()
+            .to_string();
+        let mut text = &full_text[..];
+        while let Some(pos) = text.find("#[macro_export]") {
+            text = &text[pos..];
+            let pos = text.find("macro_rules!").unwrap();
+            text = &text[(pos + "macro_rules!".len())..];
+            let pos = text.find('{').unwrap();
+            let macro_name = &text[..pos].trim();
+            let mut fqn = gen_fqn_by_path(path);
+            fqn.insert(0, lib_name.to_owned());
+            res.insert(
+                macro_name.to_string(),
+                (
+                    format!("{}{}", path_prefix, path)
+                        .replace('\\', "/")
+                        .to_string(),
+                    fqn,
+                ),
+            );
         }
     }
 }
 
-fn find_macro() -> HashMap<String, (String, Vec<String>)> {
-    let root = format!("../{}/src", LIB_NAME);
+fn find_macro<F: FileExplorer>(
+    libraries: &[String],
+    file_explorer: &F,
+) -> HashMap<String, (String, Vec<String>)> {
+    log("Find all macros...");
     let mut res = HashMap::new();
-    find_macro_impl(root, Vec::new(), &mut res);
+    for lib in libraries.iter() {
+        let root = format!("../{}/src/", lib);
+        find_macro_impl(&root, lib, &mut res, file_explorer);
+    }
+    log(&format!("Found macros: {:?}", res));
     res
 }
 
-fn add_rerun_if_changed_instructions() {
+fn add_rerun_if_changed_instructions(libraries: &[String]) {
     let add = |file: &str| {
         println!("cargo:rerun-if-changed={}", file);
     };
     add(".");
-    add(&format!("../{}", LIB_NAME));
+    for lib in libraries.iter() {
+        add(&format!("../{}", lib));
+    }
 }
 
-pub fn build() {
-    let all_macro = find_macro();
-    let (mut all_code, task) = find_usages_and_code(
-        "src/main.rs",
-        LIB_NAME,
-        Vec::new(),
-        &mut HashSet::new(),
-        &all_macro,
-    );
-    let task = task.unwrap();
-    let mut code = Vec::new();
-    code.push(format!("// {}", task.url));
-    all_code.sort();
-    build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
-    let mut main = read_from_file("../templates/main/main.rs");
+fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
+    // Task json should be written in the first line of the main.rs
+    let first_line = file_explorer
+        .read_file("src/main.rs")
+        .into_iter()
+        .find(|s| !s.trim().is_empty())?;
+    let first_line = first_line.trim();
+    if !first_line.starts_with("//") {
+        return None;
+    }
+    let first_line = &first_line[2..];
+    serde_json::from_str::<Task>(first_line).ok()
+}
+
+fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
+    if !file_explorer.file_exists("../templates/main/main.rs") {
+        // fallback to the old mode
+        return "fn main() {\n    crate::solution::submit();\n}".to_string();
+    }
+
+    let read_file = |filename: &str| -> String { file_explorer.read_file(filename).join("\n") };
+
+    let mut main = read_file("../templates/main/main.rs");
+    let task = parse_task(file_explorer).expect("Can't parse task json");
+
     match task.input.io_type {
         IOEnum::StdIn => {
-            main = main.replace("$INPUT", read_from_file("../templates/main/stdin.rs").as_str());
+            main = main.replace("$INPUT", &read_file("../templates/main/stdin.rs"));
         }
         IOEnum::Regex => {
-            main = main.replace("$INPUT", read_from_file("../templates/main/regex.rs").as_str());
+            main = main.replace("$INPUT", &read_file("../templates/main/regex.rs"));
         }
         IOEnum::File => {
-            main = main.replace("$INPUT", read_from_file("../templates/main/file_in.rs").as_str());
+            main = main.replace("$INPUT", &read_file("../templates/main/file_in.rs"));
         }
-        _ => {
+        IOEnum::StdOut => {
             unreachable!()
         }
     }
     match task.output.io_type {
         IOEnum::StdOut => {
-            main = main.replace("$OUTPUT", read_from_file("../templates/main/stdout.rs").as_str());
+            main = main.replace("$OUTPUT", &read_file("../templates/main/stdout.rs"));
         }
         IOEnum::File => {
-            main = main.replace("$OUTPUT", read_from_file("../templates/main/file_out.rs").as_str());
+            main = main.replace("$OUTPUT", &read_file("../templates/main/file_out.rs"));
         }
-        _ => {
+        IOEnum::Regex | IOEnum::StdIn => {
             unreachable!()
         }
     }
@@ -403,7 +516,52 @@ pub fn build() {
     if let Some(out_file) = task.output.file_name {
         main = main.replace("$OUT_FILE", out_file.as_str());
     }
+    main
+}
+
+pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
+    libraries: &[String],
+    file_explorer: &F,
+    minimize: bool,
+) -> Vec<String> {
+    let all_macro = find_macro(libraries, file_explorer);
+    let mut all_code = find_usages_and_code(
+        "src/main.rs",
+        None,
+        Vec::new(),
+        &mut HashSet::new(),
+        &all_macro,
+        libraries,
+        file_explorer,
+        minimize,
+    );
+    let mut code = Vec::new();
+    if let Some(task) = parse_task(file_explorer) {
+        code.push(format!("// {}", task.url));
+    }
+
+    // try to put real new code on top of the generated file
+    all_code.sort_by_key(|code_file| -> (bool, CodeFile) {
+        let is_library_code = match code_file.fqn.get(0) {
+            Some(module) => libraries.contains(module),
+            None => false,
+        };
+        (is_library_code, code_file.clone())
+    });
+    build_code(Vec::new(), all_code.as_mut_slice(), &mut code);
+    let main = build_main_fun(file_explorer);
     code.push(main);
+    code
+}
+
+pub fn build_several_libraries(libraries: &[String], minimize: bool) {
+    let file_explorer = RealFileExplorer::new();
+    let code = build_several_libraries_impl(libraries, &file_explorer, minimize);
+
     crate::write_lines("../main/src/main.rs", code);
-    add_rerun_if_changed_instructions();
+    add_rerun_if_changed_instructions(libraries);
+}
+
+pub fn build() {
+    build_several_libraries(&["algo_lib".to_owned()], false);
 }

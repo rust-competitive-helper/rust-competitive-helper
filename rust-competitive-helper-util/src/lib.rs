@@ -1,4 +1,6 @@
 pub mod build;
+mod file_explorer;
+mod tests;
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -101,6 +103,22 @@ where
     let mut res = Vec::new();
     for line in io::BufReader::new(file).lines() {
         res.push(line.unwrap());
+    }
+    res
+}
+
+pub fn all_rs_files_in_dir<P>(path: P) -> Vec<String>
+where
+    P: AsRef<Path> + Display,
+{
+    let mut res = Vec::new();
+    for path in fs::read_dir(path).unwrap() {
+        let path = path.unwrap();
+        if let Some(path_str) = path.file_name().to_str() {
+            if path_str.ends_with("rs") {
+                res.push(path_str.to_owned());
+            }
+        }
     }
     res
 }
