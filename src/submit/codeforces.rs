@@ -1,33 +1,43 @@
 use crossterm::execute;
-use regex::Regex;
-use crossterm::style::SetForegroundColor;
 use crossterm::style::Color;
 use crossterm::style::ResetColor;
+use crossterm::style::SetForegroundColor;
+use regex::Regex;
 
 // Url should be https://codeforces.com/$contest_type/$contest_id/problem/$problem_id
 pub(crate) fn submit(url: &str) {
-    let url_regex = Regex::new(r#"https://codeforces.com/(\w+)/(\d+)/problem/(\w+)"#).unwrap();
+    let url_regex = Regex::new(r"https://codeforces.com/(\w+)/(\d+)/problem/(\w+)").unwrap();
     let (contest_type, contest_id, problem_id) = {
         match url_regex.captures(url) {
             None => {
                 failure("Unexpected URL for codeforces problem");
                 return;
             }
-            Some(caps) => (caps[1].to_string(), caps[2].to_string().parse::<u32>().unwrap(), caps[3].to_string()),
+            Some(caps) => (
+                caps[1].to_string(),
+                caps[2].to_string().parse::<u32>().unwrap(),
+                caps[3].to_string(),
+            ),
         }
     };
     let mut client = client::WebClient::new();
-    if let Err(_) = client.login() {
+    if client.login().is_err() {
         return;
     }
     if let Ok(id) = client.submit(contest_id, &problem_id, &contest_type) {
         let mut last_len = 0;
         loop {
-            if let Ok(body) = client.get_url(&format!("https://codeforces.com/{}/{}/submission/{}", contest_type, contest_id, id)) {
-                let outcome = Regex::new(r#"<span class='verdict-(\w*)'>(([^<]|<s)*)</span>"#).unwrap();
+            if let Ok(body) = client.get_url(&format!(
+                "https://codeforces.com/{}/{}/submission/{}",
+                contest_type, contest_id, id
+            )) {
+                let outcome =
+                    Regex::new(r"<span class='verdict-(\w*)'>(([^<]|<s)*)</span>").unwrap();
                 let caps = outcome.captures(&body).unwrap();
                 let outcome_type = caps[1].to_string();
-                let outcome = caps[2].to_string().replace("<span class=\"verdict-format-judged\">", "");
+                let outcome = caps[2]
+                    .to_string()
+                    .replace("<span class=\"verdict-format-judged\">", "");
                 for _ in 0..last_len {
                     print!("{}", 8u8 as char);
                 }
@@ -38,13 +48,13 @@ pub(crate) fn submit(url: &str) {
                     print!("{}", 8u8 as char);
                 }
                 last_len = match outcome_type.as_str() {
-                    "waiting" => pending(&format!("{}", outcome)),
+                    "waiting" => pending(&outcome.to_string()),
                     "accepted" => {
-                        success(&format!("{}", outcome));
+                        success(&outcome.to_string());
                         return;
                     }
                     "rejected" => {
-                        failure(&format!("{}", outcome));
+                        failure(&outcome.to_string());
                         return;
                     }
                     _ => {
@@ -85,15 +95,15 @@ fn pending(s: &str) -> usize {
 
 // This was mostly written by woshiluo, I just fixed protocol due to codeforces changes
 mod client {
+    use crate::submit::codeforces::{failure, success};
+    use dialoguer::console::Term;
+    use dialoguer::theme::ColorfulTheme;
+    use dialoguer::{Input, Password};
     use regex::Regex;
-    use std::sync::Arc;
     use std::fmt;
     use std::fs::{create_dir_all, File};
     use std::io::Read;
-    use dialoguer::console::Term;
-    use dialoguer::{Input, Password};
-    use dialoguer::theme::ColorfulTheme;
-    use crate::submit::codeforces::{failure, success};
+    use std::sync::Arc;
 
     fn session_file() -> String {
         std::env::var("HOME").unwrap() + "/.config/rust-competitive-helper/codeforces.session"
@@ -235,8 +245,8 @@ mod client {
             params.push(("bfaa", PARMA_BFAA.into()));
             params.push(("ftaa", ftaa));
             params.push(("csrf_token", self.get_csrf(csrf_url)?));
-            let url =
-                reqwest::Url::parse_with_params(url, params).map_err(|_| CFToolError::FailedRequest)?;
+            let url = reqwest::Url::parse_with_params(url, params)
+                .map_err(|_| CFToolError::FailedRequest)?;
 
             let builder = self.client.post(url);
             let respone = builder.send().map_err(|_| CFToolError::FailedRequest)?;
@@ -262,7 +272,12 @@ mod client {
             params.push(("ftaa", ftaa));
             let token = self.get_csrf(csrf_url)?;
             params.push(("csrf_token", token.clone()));
-            let response = self.client.post(&format!("{}?csrf_token={}", url, token)).form(&params).send().unwrap();
+            let response = self
+                .client
+                .post(format!("{}?csrf_token={}", url, token))
+                .form(&params)
+                .send()
+                .unwrap();
 
             if response.status().is_success() {
                 Ok(response.text().map_err(|_| CFToolError::FailedRequest)?)
@@ -277,19 +292,16 @@ mod client {
             let handle_regex = Regex::new(r#"handle = "(.+?)""#).unwrap();
             let caps = handle_regex.captures(&body);
 
-            Ok(match caps {
-                Some(caps) => Some(caps[1].to_string()),
-                _ => None,
-            })
+            Ok(caps.map(|caps| caps[1].to_string()))
         }
+
         pub fn login(&mut self) -> Result<(), CFToolError> {
             if self.logged_in {
                 return Ok(());
             }
 
-            self.logged_in = true;
-
             if let Some(handle) = self.check_login()? {
+                self.logged_in = true;
                 success(&format!("Current user: {}", handle));
                 return Ok(());
             }
@@ -304,7 +316,8 @@ mod client {
                 .with_prompt("Password: ")
                 .interact_on(&Term::stdout())
                 .unwrap();
-            let _ = self.post_url(
+
+            self.post_url(
                 "https://codeforces.com/enter",
                 "https://codeforces.com/enter",
                 vec![
@@ -316,12 +329,22 @@ mod client {
                 ],
             )?;
 
-            success("Logged in");
-
-            Ok(())
+            if let Some(handle) = self.check_login()? {
+                self.logged_in = true;
+                success(&format!("Current user: {}", handle));
+                Ok(())
+            } else {
+                failure("Login Failed. Check your handle and password.");
+                Err(CFToolError::FailedRequest)
+            }
         }
 
-        pub fn submit(&mut self, contest_id: u32, problem_id: &str, contest_type: &str) -> Result<String, CFToolError> {
+        pub fn submit(
+            &mut self,
+            contest_id: u32,
+            problem_id: &str,
+            contest_type: &str,
+        ) -> Result<String, CFToolError> {
             println!("Submitting {} {}", contest_id, problem_id);
 
             let mut file = File::open("./main/src/main.rs").unwrap();
@@ -329,15 +352,18 @@ mod client {
 
             file.read_to_string(&mut source_code).unwrap();
 
-            let submit_url = format!("https://codeforces.com/{}/{}/submit", contest_type, contest_id);
+            let submit_url = format!(
+                "https://codeforces.com/{}/{}/submit",
+                contest_type, contest_id
+            );
             let body = self.post_url_submit(
                 &submit_url,
                 &submit_url,
                 vec![
                     ("action", "submitSolutionFormSubmitted".into()),
-                    ("submittedProblemIndex", problem_id.to_ascii_uppercase().into()),
+                    ("submittedProblemIndex", problem_id.to_ascii_uppercase()),
                     ("programTypeId", "75".to_string()),
-                    ("source", source_code.into()),
+                    ("source", source_code),
                     ("tabSize", "4".into()),
                     ("sourceFile", "".into()),
                     ("_tta", "869".into()),
@@ -348,7 +374,7 @@ mod client {
             let error_caps = error_regex.captures(&body);
 
             if error_caps.is_some() {
-                failure(&format!("Submit Failed: {}", error_caps.unwrap()[1].to_string()));
+                failure(&format!("Submit Failed: {}", &error_caps.unwrap()[1]));
 
                 return Err(CFToolError::FailedRequest);
             }

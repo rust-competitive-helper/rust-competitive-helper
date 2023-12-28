@@ -456,18 +456,18 @@ fn add_rerun_if_changed_instructions(libraries: &[String]) {
     }
 }
 
-fn parse_task<F: FileExplorer>(file_explorer: &F) -> Task {
+fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
     // Task json should be written in the first line of the main.rs
     let first_line = file_explorer
         .read_file("src/main.rs")
         .into_iter()
-        .find(|s| !s.trim().is_empty())
-        .unwrap();
+        .find(|s| !s.trim().is_empty())?;
     let first_line = first_line.trim();
-    assert!(first_line.starts_with("//"));
+    if !first_line.starts_with("//") {
+        return None;
+    }
     let first_line = &first_line[2..];
-    serde_json::from_str::<Task>(first_line)
-        .unwrap_or_else(|_| panic!("Can't parse task from: {}", first_line))
+    serde_json::from_str::<Task>(first_line).ok()
 }
 
 fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
@@ -479,7 +479,7 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
     let read_file = |filename: &str| -> String { file_explorer.read_file(filename).join("\n") };
 
     let mut main = read_file("../templates/main/main.rs");
-    let task = parse_task(file_explorer);
+    let task = parse_task(file_explorer).expect("Can't parse task json");
 
     match task.input.io_type {
         IOEnum::StdIn => {
@@ -536,6 +536,9 @@ pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
         minimize,
     );
     let mut code = Vec::new();
+    if let Some(task) = parse_task(file_explorer) {
+        code.push(format!("// {}", task.url));
+    }
 
     // try to put real new code on top of the generated file
     all_code.sort_by_key(|code_file| -> (bool, CodeFile) {
