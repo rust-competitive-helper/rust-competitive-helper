@@ -7,6 +7,7 @@ use rust_competitive_helper_util::{
 };
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 use crate::config::Config;
 
@@ -156,11 +157,14 @@ pub fn create(task: Task) {
         }
     };
     main = main.replace("$CARET", "");
+    main = main.replace("$TASK", name.as_str());
     write_to_file(format!("{}/src/main.rs", name), main);
-    let mut tester = read_from_file("templates/tester.rs");
-    tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
-    tester = tester.replace("$TASK", name.as_str());
-    write_to_file(format!("{}/src/tester.rs", name), tester);
+    if Path::new("templates/tester.rs").exists() {
+        let mut tester = read_from_file("templates/tester.rs");
+        tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
+        tester = tester.replace("$TASK", name.as_str());
+        write_to_file(format!("{}/src/tester.rs", name), tester);
+    }
     let mut toml = read_from_file("templates/Cargo.toml");
     toml = toml.replace("$TASK", name.as_str());
     write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
