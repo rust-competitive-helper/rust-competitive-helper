@@ -326,6 +326,9 @@ fn find_usages_and_code<F: FileExplorer>(
             // with "mod ...;". As we put everything into one file, we don't need to
             // do it.
         } else {
+            if let Some(library) = &current_lib {
+                line = line.replace("$crate::", &format!("$crate::{}::", library));
+            }
             let line = if minimize {
                 line.trim().to_owned()
             } else {
