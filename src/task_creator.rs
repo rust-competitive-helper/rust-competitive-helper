@@ -163,6 +163,7 @@ pub fn create(task: Task) {
         let mut tester = read_from_file("templates/tester.rs");
         tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
         tester = tester.replace("$TASK", name.as_str());
+        tester = tester.replace("$INTERACTIVE", task.interactive.to_string().as_str());
         write_to_file(format!("{}/src/tester.rs", name), tester);
     }
     let mut toml = read_from_file("templates/Cargo.toml");
