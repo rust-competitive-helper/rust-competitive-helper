@@ -509,7 +509,17 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
             unreachable!()
         }
     }
-    main = main.replace("$INTERACTIVE", task.interactive.to_string().as_str());
+    if task.interactive {
+        main = main.replace(
+            "$INTERACTIVE",
+            &read_file("../templates/interactive.rs"),
+        );
+    } else {
+        main = main.replace(
+            "$INTERACTIVE",
+            &read_file("../templates/classic.rs"),
+        );
+    }
     if let Some(in_file) = task.input.file_name {
         main = main.replace("$IN_FILE", in_file.as_str());
     }

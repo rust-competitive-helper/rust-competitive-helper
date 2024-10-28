@@ -29,14 +29,6 @@ pub fn task_name(task: &Task) -> String {
     res
 }
 
-pub fn adjust_input_type(task: &mut Task) {
-    let need_to_select = get_solve(task).contains("$INVOKE");
-    if need_to_select {
-        let test_type = select_test_type();
-        task.test_type = test_type;
-    }
-}
-
 fn select_test_type() -> TestType {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Select test type:")
@@ -70,6 +62,14 @@ pub fn get_invoke(task: &Task) -> String {
         TestType::Single => "templates/single.rs",
         TestType::MultiNumber => "templates/multi_number.rs",
         TestType::MultiEof => "templates/multi_eof.rs",
+    })
+}
+
+pub fn get_interactive(task: &Task) -> String {
+    read_from_file(if task.interactive {
+        "templates/interactive.rs"
+    } else {
+        "templates/classic.rs"
     })
 }
 
@@ -136,6 +136,7 @@ pub fn create(task: Task) {
     );
     let mut solve = get_solve(&task);
     solve = solve.replace("$INVOKE", get_invoke(&task).as_str());
+    solve = solve.replace("$INTERACTIVE", get_interactive(&task).as_str());
     let mut main = read_from_file("templates/main.rs");
     main = main.replace("$SOLVE", solve.as_str());
     main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
@@ -163,7 +164,7 @@ pub fn create(task: Task) {
         let mut tester = read_from_file("templates/tester.rs");
         tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
         tester = tester.replace("$TASK", name.as_str());
-        tester = tester.replace("$INTERACTIVE", task.interactive.to_string().as_str());
+        tester = tester.replace("$INTERACTIVE", get_interactive(&task).as_str());
         write_to_file(format!("{}/src/tester.rs", name), tester);
     }
     let mut toml = read_from_file("templates/Cargo.toml");

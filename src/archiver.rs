@@ -6,7 +6,9 @@ use itertools::Itertools;
 use rust_competitive_helper_util::Task;
 use std::collections::BTreeMap;
 use std::fs;
+use std::fs::{remove_dir_all, rename};
 use std::io::{BufRead, BufReader};
+use std::iter::once;
 
 fn contest_name(group: &str) -> String {
     match group.find('-') {
@@ -59,14 +61,7 @@ fn find_additional_solution_files(task_name: &str) -> Vec<String> {
         .collect()
 }
 
-fn ask_archive(task_name: String) {
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt(format!("Task {}", task_name))
-        .default(2)
-        .items(&OPTIONS[..])
-        .interact_on(&Term::stdout())
-        .unwrap();
-
+fn ask_archive(task_name: String, selection: usize) {
     if selection == 0 {
         return;
     }
@@ -78,7 +73,7 @@ fn ask_archive(task_name: String) {
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
         let path = format!(
-            "archive/{}/{}/{}.{}.{} - {}",
+            "archive/{}/{:02}/{:02}.{:02}.{} - {}",
             now.year(),
             now.month(),
             now.day(),
@@ -134,10 +129,10 @@ fn ask_archive(task_name: String) {
                 test_lines,
             );
             let from = format!("{}/tests", task_name);
-            std::fs::rename(from, format!("algo_lib/tests/{}", task_name)).unwrap();
+            rename(from, format!("algo_lib/tests/{}", task_name)).unwrap();
         }
     }
-    std::fs::remove_dir_all(format!("{}/", task_name)).unwrap();
+    remove_dir_all(format!("{}/", task_name)).unwrap();
 
     let lines = rust_competitive_helper_util::read_lines("Cargo.toml")
         .into_iter()
@@ -171,7 +166,39 @@ pub fn archive() {
     let mut tasks = contest_list[selection].1.clone();
     tasks.sort();
 
-    for task in tasks {
-        ask_archive(task);
+    let mut selection = vec![2; tasks.len()];
+
+    let mut last = 0;
+
+    loop {
+        let id = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Change:")
+            .default(last)
+            .items(once("Done".to_string()).chain(once("Default".to_string()).chain(tasks.iter().enumerate().map(|(i, s)| format!("{} ({})", s, OPTIONS[selection[i]])))).collect::<Vec<_>>().as_slice())
+            .interact_on(&Term::stdout())
+            .unwrap();
+        let option = match id {
+            0 => break,
+            _ => {
+                Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Select option:")
+                    .default(if id > 1 { selection[id - 2] } else {
+                        if selection.iter().all(|&x| x == selection[0]) { selection[0] } else { 2 }
+                    })
+                    .items(&OPTIONS[..])
+                    .interact_on(&Term::stdout())
+                    .unwrap()
+            }
+        };
+        if id == 1 {
+            selection.fill(option);
+        } else {
+            selection[id - 2] = option;
+        }
+        last = id;
+    }
+
+    for (task, opt) in tasks.into_iter().zip(selection) {
+        ask_archive(task, opt);
     }
 }
