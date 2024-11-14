@@ -12,7 +12,7 @@ impl Default for Config {
     fn default() -> Self {
         let open_task_command = if cfg!(windows) {
             [
-                "..\\clion.cmd",
+                "rustrover.cmd",
                 "--line",
                 "$LINE",
                 "--column",

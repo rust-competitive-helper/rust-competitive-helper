@@ -12,7 +12,8 @@ pub mod solution {
         fn main() {
             
             let mut sin = std::io::stdin();
-            let input = if false {
+            let input = if 
+             {
                 crate::io::input::Input::new_with_size(&mut sin, 1)
             } else {
                 crate::io::input::Input::new(&mut sin)
@@ -20,7 +21,8 @@ pub mod solution {
             
             
             let mut stdout = std::io::stdout();
-            let output = if false {
+            let output = if 
+             {
                 crate::io::output::Output::new_with_auto_flush(&mut stdout)
             } else {
                 crate::io::output::Output::new(&mut stdout)

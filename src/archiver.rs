@@ -6,7 +6,7 @@ use itertools::Itertools;
 use rust_competitive_helper_util::Task;
 use std::collections::BTreeMap;
 use std::fs;
-use std::fs::{remove_dir_all, rename};
+use std::fs::{read_dir, remove_dir_all, rename};
 use std::io::{BufRead, BufReader};
 use std::iter::once;
 
@@ -18,15 +18,9 @@ fn contest_name(group: &str) -> String {
 }
 
 fn contest_list() -> Vec<(String, Vec<String>)> {
-    let lines = rust_competitive_helper_util::read_lines("Cargo.toml");
     let mut result = BTreeMap::new();
-    for line in lines {
-        if !line.starts_with("    ") {
-            continue;
-        }
-        let line = line.trim().as_bytes();
-        let task_name = String::from_utf8_lossy(&line[1..line.len() - 2]).to_string();
-        let main = fs::File::open(format!("{}/src/main.rs", task_name));
+    for task_name in read_dir("tasks").unwrap().map(|entry| entry.unwrap().path().file_stem().unwrap().to_str().unwrap().to_string()) {
+        let main = fs::File::open(format!("tasks/{}/src/main.rs", task_name));
         if main.is_err() {
             continue;
         }
@@ -55,7 +49,7 @@ fn contest_list() -> Vec<(String, Vec<String>)> {
 const OPTIONS: [&str; 4] = ["Skip", "Delete", "Archive only", "Archive and tests"];
 
 fn find_additional_solution_files(task_name: &str) -> Vec<String> {
-    rust_competitive_helper_util::all_rs_files_in_dir(format!("{}/src", task_name))
+    rust_competitive_helper_util::all_rs_files_in_dir(format!("tasks/{}/src", task_name))
         .into_iter()
         .filter(|file| file != "main.rs" && file != "tester.rs")
         .collect()
@@ -68,7 +62,7 @@ fn ask_archive(task_name: String, selection: usize) {
     if selection >= 2 {
         let now = Utc::now();
         let mut main =
-            rust_competitive_helper_util::read_lines(format!("{}/src/main.rs", task_name));
+            rust_competitive_helper_util::read_lines(format!("tasks/{}/src/main.rs", task_name));
         let task =
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
@@ -89,12 +83,12 @@ fn ask_archive(task_name: String, selection: usize) {
         );
         for file in find_additional_solution_files(&task_name) {
             let content =
-                rust_competitive_helper_util::read_lines(format!("{}/src/{}", task_name, file));
+                rust_competitive_helper_util::read_lines(format!("tasks/{}/src/{}", task_name, file));
             rust_competitive_helper_util::write_lines(format!("{}/{}.rs", path, file), content);
         }
         if selection == 3 {
             let tester =
-                rust_competitive_helper_util::read_lines(format!("{}/src/tester.rs", task_name));
+                rust_competitive_helper_util::read_lines(format!("tasks/{}/src/tester.rs", task_name));
             main.push("mod tester {".to_string());
             main.extend_from_slice(tester.as_slice());
             main.push("}".to_string());
@@ -128,15 +122,15 @@ fn ask_archive(task_name: String, selection: usize) {
                 format!("algo_lib/tests/{}.rs", task_name),
                 test_lines,
             );
-            let from = format!("{}/tests", task_name);
+            let from = format!("tasks/{}/tests", task_name);
             rename(from, format!("algo_lib/tests/{}", task_name)).unwrap();
         }
     }
-    remove_dir_all(format!("{}/", task_name)).unwrap();
+    remove_dir_all(format!("tasks/{}/", task_name)).unwrap();
 
     let lines = rust_competitive_helper_util::read_lines("Cargo.toml")
         .into_iter()
-        .filter(|line| line != &format!("    \"{}\",", task_name))
+        .filter(|line| line != &format!("    \"tasks/{}\",", task_name))
         .collect_vec();
     rust_competitive_helper_util::write_lines("Cargo.toml", lines);
 }

@@ -103,20 +103,20 @@ pub fn get_io_settings(task: &Task) -> String {
 fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     for l in read_lines("Cargo.toml") {
-        if l.contains(format!("\"{}\"", task_name).as_str()) {
+        if l.contains(format!("\"tasks/{}\"", task_name).as_str()) {
             eprintln!("Task {} exists", task_name);
+            open_task(task_name.to_string(), None);
             return None;
         }
         lines.push(l.clone());
         if l.as_str() == "members = [" {
-            lines.push(format!("    \"{}\",", task_name));
+            lines.push(format!("    \"tasks/{}\",", task_name));
         }
     }
     Some(lines)
 }
 
 pub fn create(task: Task) {
-    let config = Config::load();
     let name = task_name(&task);
 
     let new_cargo_toml_content = match generate_new_cargo_toml_content(&name) {
@@ -124,14 +124,14 @@ pub fn create(task: Task) {
         None => return,
     };
 
-    fs::create_dir_all(format!("{}/src", name)).unwrap();
-    fs::create_dir_all(format!("{}/tests", name)).unwrap();
+    fs::create_dir_all(format!("tasks/{}/src", name)).unwrap();
+    fs::create_dir_all(format!("tasks/{}/tests", name)).unwrap();
     for (i, test) in task.tests.iter().enumerate() {
-        write_to_file(format!("{}/tests/{}.in", name, i + 1), &test.input);
-        write_to_file(format!("{}/tests/{}.out", name, i + 1), &test.output);
+        write_to_file(format!("tasks/{}/tests/{}.in", name, i + 1), &test.input);
+        write_to_file(format!("tasks/{}/tests/{}.out", name, i + 1), &test.output);
     }
     write_to_file(
-        format!("{}/build.rs", name),
+        format!("tasks/{}/build.rs", name),
         read_from_file("templates/build.rs"),
     );
     let mut solve = get_solve(&task);
@@ -159,27 +159,36 @@ pub fn create(task: Task) {
     };
     main = main.replace("$CARET", "");
     main = main.replace("$TASK", name.as_str());
-    write_to_file(format!("{}/src/main.rs", name), main);
+    write_to_file(format!("tasks/{}/src/main.rs", name), main);
     if Path::new("templates/tester.rs").exists() {
         let mut tester = read_from_file("templates/tester.rs");
         tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
         tester = tester.replace("$TASK", name.as_str());
         tester = tester.replace("$INTERACTIVE", get_interactive(&task).as_str());
-        write_to_file(format!("{}/src/tester.rs", name), tester);
+        write_to_file(format!("tasks/{}/src/tester.rs", name), tester);
     }
     let mut toml = read_from_file("templates/Cargo.toml");
     toml = toml.replace("$TASK", name.as_str());
-    write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
+    write_to_file(format!("tasks/{}/Cargo.toml", name).as_str(), toml);
 
     write_lines("Cargo.toml", new_cargo_toml_content);
     println!("Task {} parsed!", name);
+    open_task(name, Some((row, col)));
+}
 
+fn open_task(name: String, coords: Option<(i32, i32)>) {
+    let config = Config::load();
     let open_task_result = {
         let mut templates_args: HashMap<String, String> = HashMap::new();
         templates_args.insert("$NAME".to_owned(), name.clone());
-        templates_args.insert("$LINE".to_owned(), row.to_string());
-        templates_args.insert("$COLUMN".to_owned(), col.to_string());
-        templates_args.insert("$FILE".to_owned(), format!("{}/src/main.rs", name));
+        if let Some((row, col)) = coords {
+            templates_args.insert("$LINE".to_owned(), row.to_string());
+            templates_args.insert("$COLUMN".to_owned(), col.to_string());
+        } else {
+            templates_args.insert("$LINE".to_owned(), "0".to_owned());
+            templates_args.insert("$COLUMN".to_owned(), "0".to_owned());
+        }
+        templates_args.insert("$FILE".to_owned(), format!("tasks/{}/src/main.rs", name));
         config.run_open_task_command(&templates_args)
     };
     match open_task_result {

@@ -143,23 +143,26 @@ fn all_files_impl(
     fqn_path: Vec<String>,
     root: bool,
     all_macro: &HashMap<String, (String, Vec<String>)>,
+    file_explorer: &impl FileExplorer,
 ) -> Vec<(String, Vec<String>)> {
     let mut res = Vec::new();
-    let mut add = false;
+    let this_file = format!("{}.rs", prefix);
+    if file_explorer.file_exists(&this_file) {
+        res.push((this_file, fqn_path));
+        return res;
+    }
+    let this_mod = format!("{}/{}.rs", prefix, if root { "lib" } else { "mod" });
+    if file_explorer.file_exists(&this_mod) {
+        res.push((this_mod, fqn_path.clone()));
+    }
     for usage in usages.iter() {
-        if usage.children.is_empty() {
-            if root {
-                let (file_name, fqn) = all_macro.get(&usage.tag).unwrap_or_else(|| {
-                    panic!(
-                        "Expected macro, but couldn't find its defintion. {:?}",
-                        usage.tag
-                    )
-                });
+        if root {
+            if let Some((file_name, fqn)) = all_macro.get(&usage.tag) {
                 res.push((file_name.clone(), fqn.clone()));
-            } else {
-                add = true;
+                continue;
             }
-        } else {
+        }
+        if !usage.children.is_empty() {
             let mut fqn_path = fqn_path.clone();
             fqn_path.push(usage.tag.clone());
             res.append(&mut all_files_impl(
@@ -168,11 +171,9 @@ fn all_files_impl(
                 fqn_path,
                 false,
                 all_macro,
+                file_explorer,
             ));
         }
-    }
-    if add {
-        res.push((prefix + ".rs", fqn_path));
     }
     res
 }
@@ -182,12 +183,13 @@ fn all_files(
     usage_tree: &UsageTree,
     all_macro: &HashMap<String, (String, Vec<String>)>,
     library: &Option<String>,
+    file_explorer: &impl FileExplorer,
 ) -> Vec<(String, Vec<String>)> {
     let (prefix, fqn_path) = match library {
-        Some(library) => (format!("../{}/src", library), vec![library.clone()]),
+        Some(library) => (format!("../../{}/src", library), vec![library.clone()]),
         None => ("src".to_owned(), vec![]),
     };
-    all_files_impl(&usage_tree.children, prefix, fqn_path, true, all_macro)
+    all_files_impl(&usage_tree.children, prefix, fqn_path, true, all_macro, file_explorer)
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -294,7 +296,7 @@ fn find_usages_and_code<F: FileExplorer>(
                         } else {
                             Some(usage.tag.clone())
                         };
-                        let all = all_files(&usage, all_macro, &library);
+                        let all = all_files(&usage, all_macro, &library, file_explorer);
                         log(&format!(
                             "Usage: {:?}, need to check recursively: {:?}",
                             &usage, all
@@ -321,7 +323,12 @@ fn find_usages_and_code<F: FileExplorer>(
                     unreachable!()
                 }
             }
-        } else if line.trim().starts_with("mod ") && line.trim().ends_with(';') {
+        } else if (line.trim().starts_with("mod ") || line.trim().starts_with("pub mod ")) && line.trim().ends_with(';') {
+            if let Some(last_line) = code.last() {
+                if last_line.trim() == "#[cfg(test)]" {
+                    code.pop();
+                }
+            }
             // In case of multi-file solution, [main.rs] could register other files
             // with "mod ...;". As we put everything into one file, we don't need to
             // do it.
@@ -442,7 +449,7 @@ fn find_macro<F: FileExplorer>(
     log("Find all macros...");
     let mut res = HashMap::new();
     for lib in libraries.iter() {
-        let root = format!("../{}/src/", lib);
+        let root = format!("../../{}/src/", lib);
         find_macro_impl(&root, lib, &mut res, file_explorer);
     }
     log(&format!("Found macros: {:?}", res));
@@ -455,7 +462,7 @@ fn add_rerun_if_changed_instructions(libraries: &[String]) {
     };
     add(".");
     for lib in libraries.iter() {
-        add(&format!("../{}", lib));
+        add(&format!("../../{}", lib));
     }
 }
 
@@ -474,25 +481,25 @@ fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
 }
 
 fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
-    if !file_explorer.file_exists("../templates/main/main.rs") {
+    if !file_explorer.file_exists("../../templates/main/main.rs") {
         // fallback to the old mode
         return "fn main() {\n    crate::solution::submit();\n}".to_string();
     }
 
     let read_file = |filename: &str| -> String { file_explorer.read_file(filename).join("\n") };
 
-    let mut main = read_file("../templates/main/main.rs");
+    let mut main = read_file("../../templates/main/main.rs");
     let task = parse_task(file_explorer).expect("Can't parse task json");
 
     match task.input.io_type {
         IOEnum::StdIn => {
-            main = main.replace("$INPUT", &read_file("../templates/main/stdin.rs"));
+            main = main.replace("$INPUT", &read_file("../../templates/main/stdin.rs"));
         }
         IOEnum::Regex => {
-            main = main.replace("$INPUT", &read_file("../templates/main/regex.rs"));
+            main = main.replace("$INPUT", &read_file("../../templates/main/regex.rs"));
         }
         IOEnum::File => {
-            main = main.replace("$INPUT", &read_file("../templates/main/file_in.rs"));
+            main = main.replace("$INPUT", &read_file("../../templates/main/file_in.rs"));
         }
         IOEnum::StdOut => {
             unreachable!()
@@ -500,10 +507,10 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
     }
     match task.output.io_type {
         IOEnum::StdOut => {
-            main = main.replace("$OUTPUT", &read_file("../templates/main/stdout.rs"));
+            main = main.replace("$OUTPUT", &read_file("../../templates/main/stdout.rs"));
         }
         IOEnum::File => {
-            main = main.replace("$OUTPUT", &read_file("../templates/main/file_out.rs"));
+            main = main.replace("$OUTPUT", &read_file("../../templates/main/file_out.rs"));
         }
         IOEnum::Regex | IOEnum::StdIn => {
             unreachable!()
@@ -512,12 +519,12 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
     if task.interactive {
         main = main.replace(
             "$INTERACTIVE",
-            &read_file("../templates/interactive.rs"),
+            &read_file("../../templates/interactive.rs"),
         );
     } else {
         main = main.replace(
             "$INTERACTIVE",
-            &read_file("../templates/classic.rs"),
+            &read_file("../../templates/classic.rs"),
         );
     }
     if let Some(in_file) = task.input.file_name {
@@ -571,7 +578,7 @@ pub fn build_several_libraries(libraries: &[String], minimize: bool) {
     let file_explorer = RealFileExplorer::new();
     let code = build_several_libraries_impl(libraries, &file_explorer, minimize);
 
-    crate::write_lines("../main/src/main.rs", code);
+    crate::write_lines("../../main/src/main.rs", code);
     add_rerun_if_changed_instructions(libraries);
 }
 

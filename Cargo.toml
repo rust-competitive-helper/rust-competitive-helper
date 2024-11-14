@@ -26,8 +26,8 @@ aes = "0.8"
 cbc = "0.1"
 hex = "0.4"
 rand = "0.8"
-
 regex = "1.9"
+clipboard = "0.5"
 
 
 [workspace]
