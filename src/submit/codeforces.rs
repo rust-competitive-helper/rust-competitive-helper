@@ -381,6 +381,7 @@ mod client {
         FailedRequest,
         FailedParseRespone,
         FailedTerminalOutput,
+        #[allow(dead_code)]
         WrongRespone(u16),
         NoIdReturned,
     }
