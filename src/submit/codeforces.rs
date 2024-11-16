@@ -1,14 +1,14 @@
-use regex::Regex;
 use crate::submit;
+use regex::Regex;
 
 // Url should be https://codeforces.com/$contest_type/$contest_id/problem/$problem_id
-pub(crate) fn submit(url: &str) {
+pub(crate) fn submit(url: &str) -> bool {
     let url_regex = Regex::new(r"https://codeforces.com/(\w+)/(\d+)/problem/(\w+)").unwrap();
     let (contest_type, contest_id, problem_id) = {
         match url_regex.captures(url) {
             None => {
                 submit::failure("Unexpected URL for codeforces problem");
-                return;
+                return false;
             }
             Some(caps) => (
                 caps[1].to_string(),
@@ -20,7 +20,7 @@ pub(crate) fn submit(url: &str) {
     let mut client = client::WebClient::new();
     if let Err(err) = client.login() {
         submit::failure(format!("Failed to login: {:?}", err).as_str());
-        return;
+        return false;
     }
     match client.submit(contest_id, &problem_id, &contest_type) {
         Ok(id) => {
@@ -50,31 +50,33 @@ pub(crate) fn submit(url: &str) {
                         "waiting" => submit::pending(&outcome.to_string()),
                         "accepted" => {
                             submit::success(&outcome.to_string());
-                            return;
+                            return true;
                         }
                         "rejected" => {
                             submit::failure(&outcome.to_string());
-                            return;
+                            return true;
                         }
                         _ => {
                             submit::failure(&format!("Unknown: {}", outcome));
-                            return;
+                            return false;
                         }
                     };
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 } else {
-                    return;
+                    return false;
                 }
             }
         }
         Err(err) => {
             submit::failure(format!("Failed to submit: {:?}", err).as_str());
+            false
         }
     }
 }
 
 // This was mostly written by woshiluo, I just fixed protocol due to codeforces changes
 mod client {
+    use crate::submit::{failure, success};
     use dialoguer::console::Term;
     use dialoguer::theme::ColorfulTheme;
     use dialoguer::{Input, Password};
@@ -83,7 +85,6 @@ mod client {
     use std::fs::{create_dir_all, File};
     use std::io::Read;
     use std::sync::Arc;
-    use crate::submit::{failure, success};
 
     fn session_file() -> String {
         std::env::var("HOME").unwrap() + "/.config/rust-competitive-helper/codeforces.session"
@@ -183,7 +184,10 @@ mod client {
                         &format!("RCPC={}", hex::encode(pt)),
                         &"https://codeforces.com".parse::<reqwest::Url>().unwrap(),
                     )
-                    .map_err(|_| CFToolError::FailedRequest)?;
+                    .map_err(|err| {
+                        println!("{:?}", err);
+                        CFToolError::FailedRequest
+                    })?;
             }
 
             Ok(())
@@ -203,7 +207,10 @@ mod client {
             self.set_rcpc()?;
 
             let builder = self.client.get(url);
-            let respone = builder.send().map_err(|_| CFToolError::FailedRequest)?;
+            let respone = builder.send().map_err(|err| {
+                println!("{:?}", err);
+                CFToolError::FailedRequest
+            })?;
 
             if respone.status().is_success() {
                 Ok(respone.text().map_err(|_| CFToolError::FailedRequest)?)

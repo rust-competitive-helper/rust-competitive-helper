@@ -1,37 +1,50 @@
 mod codeforces;
-mod oj;
-mod kattis;
 mod dmoj;
+mod kattis;
+mod oj;
 
-use std::process::Command;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use crossterm::execute;
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use rust_competitive_helper_util::{read_from_file, read_lines};
+use std::process::Command;
 
 pub fn submit() {
     let file = "main/src/main.rs";
-    let url = read_lines(file).into_iter().next().unwrap().split_at(2).1.trim().to_string();
+    let url = read_lines(file)
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap()
+        .split_at(2)
+        .1
+        .trim()
+        .to_string();
     let site = url.split('/').nth(2).unwrap_or("Manual");
     match site {
         "codeforces.com" => {
-            codeforces::submit(&url);
+            if codeforces::submit(&url) {
+                return;
+            }
         }
         "atcoder.jp" | "www.hackerrank.com" | "yukicoder.me" => {
             oj::submit(&url);
+            return;
         }
         "open.kattis.com" => {
             kattis::submit(&url);
+            return;
         }
         "dmoj.ca" => {
             dmoj::submit(&url);
+            return;
         }
-        _ => {
-            println!("Unsupported site, code copied to clipboard: {}", site);
-            let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-            ctx.set_contents(read_from_file("main/src/main.rs")).unwrap();
-        }
+        _ => {}
     }
+    println!("Unsupported site, code copied to clipboard: {}", site);
+    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+    ctx.set_contents(read_from_file("main/src/main.rs").unwrap())
+        .unwrap();
 }
 
 fn success(s: &str) -> usize {

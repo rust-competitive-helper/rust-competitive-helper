@@ -189,7 +189,14 @@ fn all_files(
         Some(library) => (format!("../../{}/src", library), vec![library.clone()]),
         None => ("src".to_owned(), vec![]),
     };
-    all_files_impl(&usage_tree.children, prefix, fqn_path, true, all_macro, file_explorer)
+    all_files_impl(
+        &usage_tree.children,
+        prefix,
+        fqn_path,
+        true,
+        all_macro,
+        file_explorer,
+    )
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -253,7 +260,7 @@ fn find_usages_and_code<F: FileExplorer>(
 
     log(&format!("Parsing file {}...", file));
 
-    let mut lines = file_explorer.read_file(file).into_iter();
+    let mut lines = file_explorer.read_file(file).unwrap().into_iter();
     while let Some(mut line) = lines.next() {
         if line.contains("//START MAIN") {
             main = true;
@@ -323,7 +330,9 @@ fn find_usages_and_code<F: FileExplorer>(
                     unreachable!()
                 }
             }
-        } else if (line.trim().starts_with("mod ") || line.trim().starts_with("pub mod ")) && line.trim().ends_with(';') {
+        } else if (line.trim().starts_with("mod ") || line.trim().starts_with("pub mod "))
+            && line.trim().ends_with(';')
+        {
             if let Some(last_line) = code.last() {
                 if last_line.trim() == "#[cfg(test)]" {
                     code.pop();
@@ -418,6 +427,7 @@ fn find_macro_impl<F: FileExplorer>(
     for path in rs_files.iter() {
         let full_text = file_explorer
             .read_file(&format!("{}{}", path_prefix, path))
+            .unwrap()
             .concat()
             .to_string();
         let mut text = &full_text[..];
@@ -470,6 +480,7 @@ fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
     // Task json should be written in the first line of the main.rs
     let first_line = file_explorer
         .read_file("src/main.rs")
+        .unwrap()
         .into_iter()
         .find(|s| !s.trim().is_empty())?;
     let first_line = first_line.trim();
@@ -486,20 +497,31 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
         return "fn main() {\n    crate::solution::submit();\n}".to_string();
     }
 
-    let read_file = |filename: &str| -> String { file_explorer.read_file(filename).join("\n") };
+    let read_file = |filename: &str| -> Result<String, String> {
+        Ok(file_explorer.read_file(filename)?.join("\n"))
+    };
 
-    let mut main = read_file("../../templates/main/main.rs");
+    let mut main = read_file("../../templates/main/main.rs").unwrap();
     let task = parse_task(file_explorer).expect("Can't parse task json");
 
     match task.input.io_type {
         IOEnum::StdIn => {
-            main = main.replace("$INPUT", &read_file("../../templates/main/stdin.rs"));
+            main = main.replace(
+                "$INPUT",
+                &read_file("../../templates/main/stdin.rs").unwrap(),
+            );
         }
         IOEnum::Regex => {
-            main = main.replace("$INPUT", &read_file("../../templates/main/regex.rs"));
+            main = main.replace(
+                "$INPUT",
+                &read_file("../../templates/main/regex.rs").unwrap(),
+            );
         }
         IOEnum::File => {
-            main = main.replace("$INPUT", &read_file("../../templates/main/file_in.rs"));
+            main = main.replace(
+                "$INPUT",
+                &read_file("../../templates/main/file_in.rs").unwrap(),
+            );
         }
         IOEnum::StdOut => {
             unreachable!()
@@ -507,25 +529,27 @@ fn build_main_fun<F: FileExplorer>(file_explorer: &F) -> String {
     }
     match task.output.io_type {
         IOEnum::StdOut => {
-            main = main.replace("$OUTPUT", &read_file("../../templates/main/stdout.rs"));
+            main = main.replace(
+                "$OUTPUT",
+                &read_file("../../templates/main/stdout.rs").unwrap(),
+            );
         }
         IOEnum::File => {
-            main = main.replace("$OUTPUT", &read_file("../../templates/main/file_out.rs"));
+            main = main.replace(
+                "$OUTPUT",
+                &read_file("../../templates/main/file_out.rs").unwrap(),
+            );
         }
         IOEnum::Regex | IOEnum::StdIn => {
             unreachable!()
         }
     }
     if task.interactive {
-        main = main.replace(
-            "$INTERACTIVE",
-            &read_file("../../templates/interactive.rs"),
-        );
-    } else {
-        main = main.replace(
-            "$INTERACTIVE",
-            &read_file("../../templates/classic.rs"),
-        );
+        if let Ok(interactive) = read_file("../../templates/interactive.rs") {
+            main = main.replace("$INTERACTIVE", &interactive);
+        }
+    } else if let Ok(classic) = read_file("../../templates/classic.rs") {
+        main = main.replace("$INTERACTIVE", &classic);
     }
     if let Some(in_file) = task.input.file_name {
         main = main.replace("$IN_FILE", in_file.as_str());
@@ -562,7 +586,7 @@ pub(crate) fn build_several_libraries_impl<F: FileExplorer>(
 
     // try to put real new code on top of the generated file
     all_code.sort_by_key(|code_file| -> (bool, CodeFile) {
-        let is_library_code = match code_file.fqn.get(0) {
+        let is_library_code = match code_file.fqn.first() {
             Some(module) => libraries.contains(module),
             None => false,
         };

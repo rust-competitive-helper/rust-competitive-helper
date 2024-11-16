@@ -1,6 +1,6 @@
-use std::process::Command;
-use regex::Regex;
 use crate::submit::{check_available, failure};
+use regex::Regex;
+use std::process::Command;
 
 pub(crate) fn submit(url: &str) {
     let url_regex = Regex::new(r".*/(\w+)([?].*)?").unwrap();
@@ -17,5 +17,8 @@ pub(crate) fn submit(url: &str) {
         failure("Please install kattis-cli from https://github.com/Kattis/kattis-cli");
         return;
     }
-    Command::new("kattis").args(&["main/src/main.rs", "-p", problem_id.as_str(), "-f"]).status().unwrap();
+    Command::new("kattis")
+        .args(["main/src/main.rs", "-p", problem_id.as_str(), "-f"])
+        .status()
+        .unwrap();
 }

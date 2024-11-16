@@ -19,7 +19,16 @@ fn contest_name(group: &str) -> String {
 
 fn contest_list() -> Vec<(String, Vec<String>)> {
     let mut result = BTreeMap::new();
-    for task_name in read_dir("tasks").unwrap().map(|entry| entry.unwrap().path().file_stem().unwrap().to_str().unwrap().to_string()) {
+    for task_name in read_dir("tasks").unwrap().map(|entry| {
+        entry
+            .unwrap()
+            .path()
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    }) {
         let main = fs::File::open(format!("tasks/{}/src/main.rs", task_name));
         if main.is_err() {
             continue;
@@ -62,7 +71,8 @@ fn ask_archive(task_name: String, selection: usize) {
     if selection >= 2 {
         let now = Utc::now();
         let mut main =
-            rust_competitive_helper_util::read_lines(format!("tasks/{}/src/main.rs", task_name));
+            rust_competitive_helper_util::read_lines(format!("tasks/{}/src/main.rs", task_name))
+                .unwrap();
         let task =
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
@@ -82,13 +92,19 @@ fn ask_archive(task_name: String, selection: usize) {
             main.clone(),
         );
         for file in find_additional_solution_files(&task_name) {
-            let content =
-                rust_competitive_helper_util::read_lines(format!("tasks/{}/src/{}", task_name, file));
+            let content = rust_competitive_helper_util::read_lines(format!(
+                "tasks/{}/src/{}",
+                task_name, file
+            ))
+            .unwrap();
             rust_competitive_helper_util::write_lines(format!("{}/{}.rs", path, file), content);
         }
         if selection == 3 {
-            let tester =
-                rust_competitive_helper_util::read_lines(format!("tasks/{}/src/tester.rs", task_name));
+            let tester = rust_competitive_helper_util::read_lines(format!(
+                "tasks/{}/src/tester.rs",
+                task_name
+            ))
+            .unwrap();
             main.push("mod tester {".to_string());
             main.extend_from_slice(tester.as_slice());
             main.push("}".to_string());
@@ -129,6 +145,7 @@ fn ask_archive(task_name: String, selection: usize) {
     remove_dir_all(format!("tasks/{}/", task_name)).unwrap();
 
     let lines = rust_competitive_helper_util::read_lines("Cargo.toml")
+        .unwrap()
         .into_iter()
         .filter(|line| line != &format!("    \"tasks/{}\",", task_name))
         .collect_vec();
@@ -168,21 +185,35 @@ pub fn archive() {
         let id = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Change:")
             .default(last)
-            .items(once("Done".to_string()).chain(once("Default".to_string()).chain(tasks.iter().enumerate().map(|(i, s)| format!("{} ({})", s, OPTIONS[selection[i]])))).collect::<Vec<_>>().as_slice())
+            .items(
+                once("Done".to_string())
+                    .chain(
+                        once("Default".to_string()).chain(
+                            tasks
+                                .iter()
+                                .enumerate()
+                                .map(|(i, s)| format!("{} ({})", s, OPTIONS[selection[i]])),
+                        ),
+                    )
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )
             .interact_on(&Term::stdout())
             .unwrap();
         let option = match id {
             0 => break,
-            _ => {
-                Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Select option:")
-                    .default(if id > 1 { selection[id - 2] } else {
-                        if selection.iter().all(|&x| x == selection[0]) { selection[0] } else { 2 }
-                    })
-                    .items(&OPTIONS[..])
-                    .interact_on(&Term::stdout())
-                    .unwrap()
-            }
+            _ => Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select option:")
+                .default(if id > 1 {
+                    selection[id - 2]
+                } else if selection.iter().all(|&x| x == selection[0]) {
+                    selection[0]
+                } else {
+                    2
+                })
+                .items(&OPTIONS[..])
+                .interact_on(&Term::stdout())
+                .unwrap(),
         };
         if id == 1 {
             selection.fill(option);

@@ -52,12 +52,12 @@ pub fn get_solve(task: &Task) -> String {
     };
     let solve = std::fs::read_to_string(format!("templates/sites/{}.rs", site));
     match solve {
-        Err(_) => read_from_file("templates/sites/default.rs"),
+        Err(_) => read_from_file("templates/sites/default.rs").unwrap(),
         Ok(solve) => solve,
     }
 }
 
-pub fn get_invoke(task: &Task) -> String {
+pub fn get_invoke(task: &Task) -> Option<String> {
     read_from_file(match task.test_type {
         TestType::Single => "templates/single.rs",
         TestType::MultiNumber => "templates/multi_number.rs",
@@ -65,7 +65,7 @@ pub fn get_invoke(task: &Task) -> String {
     })
 }
 
-pub fn get_interactive(task: &Task) -> String {
+pub fn get_interactive(task: &Task) -> Option<String> {
     read_from_file(if task.interactive {
         "templates/interactive.rs"
     } else {
@@ -102,7 +102,7 @@ pub fn get_io_settings(task: &Task) -> String {
 
 fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    for l in read_lines("Cargo.toml") {
+    for l in read_lines("Cargo.toml").unwrap() {
         if l.contains(format!("\"tasks/{}\"", task_name).as_str()) {
             eprintln!("Task {} exists", task_name);
             open_task(task_name.to_string(), None);
@@ -132,12 +132,16 @@ pub fn create(task: Task) {
     }
     write_to_file(
         format!("tasks/{}/build.rs", name),
-        read_from_file("templates/build.rs"),
+        read_from_file("templates/build.rs").expect("templates/build.rs not found"),
     );
     let mut solve = get_solve(&task);
-    solve = solve.replace("$INVOKE", get_invoke(&task).as_str());
-    solve = solve.replace("$INTERACTIVE", get_interactive(&task).as_str());
-    let mut main = read_from_file("templates/main.rs");
+    if let Some(invoke) = get_invoke(&task) {
+        solve = solve.replace("$INVOKE", invoke.as_str());
+    }
+    if let Some(interactive) = get_interactive(&task) {
+        solve = solve.replace("$INTERACTIVE", interactive.as_str());
+    }
+    let mut main = read_from_file("templates/main.rs").expect("templates/main.rs not found");
     main = main.replace("$SOLVE", solve.as_str());
     main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
     main = main.replace("$IO_SETTINGS", get_io_settings(&task).as_str());
@@ -161,13 +165,16 @@ pub fn create(task: Task) {
     main = main.replace("$TASK", name.as_str());
     write_to_file(format!("tasks/{}/src/main.rs", name), main);
     if Path::new("templates/tester.rs").exists() {
-        let mut tester = read_from_file("templates/tester.rs");
+        let mut tester =
+            read_from_file("templates/tester.rs").expect("templates/tester.rs not found");
         tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
         tester = tester.replace("$TASK", name.as_str());
-        tester = tester.replace("$INTERACTIVE", get_interactive(&task).as_str());
+        if let Some(interactive) = get_interactive(&task) {
+            tester = tester.replace("$INTERACTIVE", interactive.as_str());
+        }
         write_to_file(format!("tasks/{}/src/tester.rs", name), tester);
     }
-    let mut toml = read_from_file("templates/Cargo.toml");
+    let mut toml = read_from_file("templates/Cargo.toml").expect("templates/Cargo.toml not found");
     toml = toml.replace("$TASK", name.as_str());
     write_to_file(format!("tasks/{}/Cargo.toml", name).as_str(), toml);
 

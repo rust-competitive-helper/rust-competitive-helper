@@ -5,7 +5,7 @@ use crate::read_lines;
 pub trait FileExplorer {
     // TODO: add error handling
     // TODO: path - not string?
-    fn read_file(&self, filename: &str) -> Vec<String>;
+    fn read_file(&self, filename: &str) -> Result<Vec<String>, String>;
 
     // returns list of relative paths
     // [path_prefix] should end with '/'
@@ -52,7 +52,7 @@ impl RealFileExplorer {
 }
 
 impl FileExplorer for RealFileExplorer {
-    fn read_file(&self, filename: &str) -> Vec<String> {
+    fn read_file(&self, filename: &str) -> Result<Vec<String>, String> {
         read_lines(filename)
     }
 
@@ -72,11 +72,12 @@ pub struct FakeFileExplorer {
 }
 
 impl FileExplorer for FakeFileExplorer {
-    fn read_file(&self, filename: &str) -> Vec<String> {
-        self.files
+    fn read_file(&self, filename: &str) -> Result<Vec<String>, String> {
+        Ok(self
+            .files
             .get(filename)
             .unwrap_or_else(|| panic!("Can't open file: {}", &filename))
-            .clone()
+            .clone())
     }
 
     fn get_all_rs_files(&self, path_prefix: &str) -> Vec<String> {
