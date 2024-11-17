@@ -29,14 +29,6 @@ pub fn task_name(task: &Task) -> String {
     res
 }
 
-pub fn adjust_input_type(task: &mut Task) {
-    let need_to_select = get_solve(task).contains("$INVOKE");
-    if need_to_select {
-        let test_type = select_test_type();
-        task.test_type = test_type;
-    }
-}
-
 fn select_test_type() -> TestType {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Select test type:")
@@ -60,16 +52,24 @@ pub fn get_solve(task: &Task) -> String {
     };
     let solve = std::fs::read_to_string(format!("templates/sites/{}.rs", site));
     match solve {
-        Err(_) => read_from_file("templates/sites/default.rs"),
+        Err(_) => read_from_file("templates/sites/default.rs").unwrap(),
         Ok(solve) => solve,
     }
 }
 
-pub fn get_invoke(task: &Task) -> String {
+pub fn get_invoke(task: &Task) -> Option<String> {
     read_from_file(match task.test_type {
         TestType::Single => "templates/single.rs",
         TestType::MultiNumber => "templates/multi_number.rs",
         TestType::MultiEof => "templates/multi_eof.rs",
+    })
+}
+
+pub fn get_interactive(task: &Task) -> Option<String> {
+    read_from_file(if task.interactive {
+        "templates/interactive.rs"
+    } else {
+        "templates/classic.rs"
     })
 }
 
@@ -102,21 +102,21 @@ pub fn get_io_settings(task: &Task) -> String {
 
 fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    for l in read_lines("Cargo.toml") {
-        if l.contains(format!("\"{}\"", task_name).as_str()) {
+    for l in read_lines("Cargo.toml").unwrap() {
+        if l.contains(format!("\"tasks/{}\"", task_name).as_str()) {
             eprintln!("Task {} exists", task_name);
+            open_task(task_name.to_string(), None);
             return None;
         }
         lines.push(l.clone());
         if l.as_str() == "members = [" {
-            lines.push(format!("    \"{}\",", task_name));
+            lines.push(format!("    \"tasks/{}\",", task_name));
         }
     }
     Some(lines)
 }
 
 pub fn create(task: Task) {
-    let config = Config::load();
     let name = task_name(&task);
 
     let new_cargo_toml_content = match generate_new_cargo_toml_content(&name) {
@@ -124,19 +124,24 @@ pub fn create(task: Task) {
         None => return,
     };
 
-    fs::create_dir_all(format!("{}/src", name)).unwrap();
-    fs::create_dir_all(format!("{}/tests", name)).unwrap();
+    fs::create_dir_all(format!("tasks/{}/src", name)).unwrap();
+    fs::create_dir_all(format!("tasks/{}/tests", name)).unwrap();
     for (i, test) in task.tests.iter().enumerate() {
-        write_to_file(format!("{}/tests/{}.in", name, i + 1), &test.input);
-        write_to_file(format!("{}/tests/{}.out", name, i + 1), &test.output);
+        write_to_file(format!("tasks/{}/tests/{}.in", name, i + 1), &test.input);
+        write_to_file(format!("tasks/{}/tests/{}.out", name, i + 1), &test.output);
     }
     write_to_file(
-        format!("{}/build.rs", name),
-        read_from_file("templates/build.rs"),
+        format!("tasks/{}/build.rs", name),
+        read_from_file("templates/build.rs").expect("templates/build.rs not found"),
     );
     let mut solve = get_solve(&task);
-    solve = solve.replace("$INVOKE", get_invoke(&task).as_str());
-    let mut main = read_from_file("templates/main.rs");
+    if let Some(invoke) = get_invoke(&task) {
+        solve = solve.replace("$INVOKE", invoke.as_str());
+    }
+    if let Some(interactive) = get_interactive(&task) {
+        solve = solve.replace("$INTERACTIVE", interactive.as_str());
+    }
+    let mut main = read_from_file("templates/main.rs").expect("templates/main.rs not found");
     main = main.replace("$SOLVE", solve.as_str());
     main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
     main = main.replace("$IO_SETTINGS", get_io_settings(&task).as_str());
@@ -158,27 +163,39 @@ pub fn create(task: Task) {
     };
     main = main.replace("$CARET", "");
     main = main.replace("$TASK", name.as_str());
-    write_to_file(format!("{}/src/main.rs", name), main);
+    write_to_file(format!("tasks/{}/src/main.rs", name), main);
     if Path::new("templates/tester.rs").exists() {
-        let mut tester = read_from_file("templates/tester.rs");
+        let mut tester =
+            read_from_file("templates/tester.rs").expect("templates/tester.rs not found");
         tester = tester.replace("$TIME_LIMIT", task.time_limit.to_string().as_str());
         tester = tester.replace("$TASK", name.as_str());
-        tester = tester.replace("$INTERACTIVE", task.interactive.to_string().as_str());
-        write_to_file(format!("{}/src/tester.rs", name), tester);
+        if let Some(interactive) = get_interactive(&task) {
+            tester = tester.replace("$INTERACTIVE", interactive.as_str());
+        }
+        write_to_file(format!("tasks/{}/src/tester.rs", name), tester);
     }
-    let mut toml = read_from_file("templates/Cargo.toml");
+    let mut toml = read_from_file("templates/Cargo.toml").expect("templates/Cargo.toml not found");
     toml = toml.replace("$TASK", name.as_str());
-    write_to_file(format!("{}/Cargo.toml", name).as_str(), toml);
+    write_to_file(format!("tasks/{}/Cargo.toml", name).as_str(), toml);
 
     write_lines("Cargo.toml", new_cargo_toml_content);
     println!("Task {} parsed!", name);
+    open_task(name, Some((row, col)));
+}
 
+fn open_task(name: String, coords: Option<(i32, i32)>) {
+    let config = Config::load();
     let open_task_result = {
         let mut templates_args: HashMap<String, String> = HashMap::new();
         templates_args.insert("$NAME".to_owned(), name.clone());
-        templates_args.insert("$LINE".to_owned(), row.to_string());
-        templates_args.insert("$COLUMN".to_owned(), col.to_string());
-        templates_args.insert("$FILE".to_owned(), format!("{}/src/main.rs", name));
+        if let Some((row, col)) = coords {
+            templates_args.insert("$LINE".to_owned(), row.to_string());
+            templates_args.insert("$COLUMN".to_owned(), col.to_string());
+        } else {
+            templates_args.insert("$LINE".to_owned(), "0".to_owned());
+            templates_args.insert("$COLUMN".to_owned(), "0".to_owned());
+        }
+        templates_args.insert("$FILE".to_owned(), format!("tasks/{}/src/main.rs", name));
         config.run_open_task_command(&templates_args)
     };
     match open_task_result {

@@ -1,17 +1,14 @@
-use crossterm::execute;
-use crossterm::style::Color;
-use crossterm::style::ResetColor;
-use crossterm::style::SetForegroundColor;
+use crate::submit;
 use regex::Regex;
 
 // Url should be https://codeforces.com/$contest_type/$contest_id/problem/$problem_id
-pub(crate) fn submit(url: &str) {
+pub(crate) fn submit(url: &str) -> bool {
     let url_regex = Regex::new(r"https://codeforces.com/(\w+)/(\d+)/problem/(\w+)").unwrap();
     let (contest_type, contest_id, problem_id) = {
         match url_regex.captures(url) {
             None => {
-                failure("Unexpected URL for codeforces problem");
-                return;
+                submit::failure("Unexpected URL for codeforces problem");
+                return false;
             }
             Some(caps) => (
                 caps[1].to_string(),
@@ -21,81 +18,65 @@ pub(crate) fn submit(url: &str) {
         }
     };
     let mut client = client::WebClient::new();
-    if client.login().is_err() {
-        return;
+    if let Err(err) = client.login() {
+        submit::failure(format!("Failed to login: {:?}", err).as_str());
+        return false;
     }
-    if let Ok(id) = client.submit(contest_id, &problem_id, &contest_type) {
-        let mut last_len = 0;
-        loop {
-            if let Ok(body) = client.get_url(&format!(
-                "https://codeforces.com/{}/{}/submission/{}",
-                contest_type, contest_id, id
-            )) {
-                let outcome =
-                    Regex::new(r"<span class='verdict-(\w*)'>(([^<]|<s)*)</span>").unwrap();
-                let caps = outcome.captures(&body).unwrap();
-                let outcome_type = caps[1].to_string();
-                let outcome = caps[2]
-                    .to_string()
-                    .replace("<span class=\"verdict-format-judged\">", "");
-                for _ in 0..last_len {
-                    print!("{}", 8u8 as char);
-                }
-                for _ in 0..last_len {
-                    print!(" ");
-                }
-                for _ in 0..last_len {
-                    print!("{}", 8u8 as char);
-                }
-                last_len = match outcome_type.as_str() {
-                    "waiting" => pending(&outcome.to_string()),
-                    "accepted" => {
-                        success(&outcome.to_string());
-                        return;
+    match client.submit(contest_id, &problem_id, &contest_type) {
+        Ok(id) => {
+            let mut last_len = 0;
+            loop {
+                if let Ok(body) = client.get_url(&format!(
+                    "https://codeforces.com/{}/{}/submission/{}",
+                    contest_type, contest_id, id
+                )) {
+                    let outcome =
+                        Regex::new(r"<span class='verdict-(\w*)'>(([^<]|<s)*)</span>").unwrap();
+                    let caps = outcome.captures(&body).unwrap();
+                    let outcome_type = caps[1].to_string();
+                    let outcome = caps[2]
+                        .to_string()
+                        .replace("<span class=\"verdict-format-judged\">", "");
+                    for _ in 0..last_len {
+                        print!("{}", 8u8 as char);
                     }
-                    "rejected" => {
-                        failure(&outcome.to_string());
-                        return;
+                    for _ in 0..last_len {
+                        print!(" ");
                     }
-                    _ => {
-                        failure(&format!("Unknown: {}", outcome));
-                        return;
+                    for _ in 0..last_len {
+                        print!("{}", 8u8 as char);
                     }
-                };
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            } else {
-                return;
+                    last_len = match outcome_type.as_str() {
+                        "waiting" => submit::pending(&outcome.to_string()),
+                        "accepted" => {
+                            submit::success(&outcome.to_string());
+                            return true;
+                        }
+                        "rejected" => {
+                            submit::failure(&outcome.to_string());
+                            return true;
+                        }
+                        _ => {
+                            submit::failure(&format!("Unknown: {}", outcome));
+                            return false;
+                        }
+                    };
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                } else {
+                    return false;
+                }
             }
+        }
+        Err(err) => {
+            submit::failure(format!("Failed to submit: {:?}", err).as_str());
+            false
         }
     }
 }
 
-fn success(s: &str) -> usize {
-    let mut stdout = std::io::stdout();
-    let _ = execute!(stdout, SetForegroundColor(Color::Green));
-    println!("{s}");
-    let _ = execute!(stdout, ResetColor);
-    s.len()
-}
-
-fn failure(s: &str) {
-    let mut stdout = std::io::stdout();
-    let _ = execute!(stdout, SetForegroundColor(Color::Red));
-    println!("{s}");
-    let _ = execute!(stdout, ResetColor);
-}
-
-fn pending(s: &str) -> usize {
-    let mut stdout = std::io::stdout();
-    let _ = execute!(stdout, SetForegroundColor(Color::Yellow));
-    print!("{s}");
-    let _ = execute!(stdout, ResetColor);
-    s.len()
-}
-
 // This was mostly written by woshiluo, I just fixed protocol due to codeforces changes
 mod client {
-    use crate::submit::codeforces::{failure, success};
+    use crate::submit::{failure, success};
     use dialoguer::console::Term;
     use dialoguer::theme::ColorfulTheme;
     use dialoguer::{Input, Password};
@@ -203,7 +184,10 @@ mod client {
                         &format!("RCPC={}", hex::encode(pt)),
                         &"https://codeforces.com".parse::<reqwest::Url>().unwrap(),
                     )
-                    .map_err(|_| CFToolError::FailedRequest)?;
+                    .map_err(|err| {
+                        println!("{:?}", err);
+                        CFToolError::FailedRequest
+                    })?;
             }
 
             Ok(())
@@ -223,7 +207,10 @@ mod client {
             self.set_rcpc()?;
 
             let builder = self.client.get(url);
-            let respone = builder.send().map_err(|_| CFToolError::FailedRequest)?;
+            let respone = builder.send().map_err(|err| {
+                println!("{:?}", err);
+                CFToolError::FailedRequest
+            })?;
 
             if respone.status().is_success() {
                 Ok(respone.text().map_err(|_| CFToolError::FailedRequest)?)
@@ -401,6 +388,7 @@ mod client {
         FailedRequest,
         FailedParseRespone,
         FailedTerminalOutput,
+        #[allow(dead_code)]
         WrongRespone(u16),
         NoIdReturned,
     }

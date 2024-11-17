@@ -22,8 +22,7 @@ fn handle(mut stream: TcpStream) {
 }
 
 fn process(request: &str) {
-    let mut task: Task = serde_json::from_slice(request.as_bytes()).unwrap();
-    task_creator::adjust_input_type(&mut task);
+    let task: Task = serde_json::from_slice(request.as_bytes()).unwrap();
     task_creator::create(task);
 }
 

@@ -45,7 +45,7 @@ mod test {
         "#,
         );
         file_explorer.add_file(
-            "../algo_lib/src/double.rs",
+            "../../algo_lib/src/double.rs",
             r#"
             pub fn double(x : i32) -> i32 {
                 x * 2
@@ -70,7 +70,7 @@ mod test {
         "#,
         );
         file_explorer.add_file(
-            "../algo_lib/src/misc/dbg_macro.rs",
+            "../../algo_lib/src/misc/dbg_macro.rs",
             r#"
             
             #[macro_export]
@@ -109,7 +109,7 @@ mod test {
         "#,
         );
         file_explorer.add_file(
-            "../algo_lib/src/double.rs",
+            "../../algo_lib/src/double.rs",
             r#"
             pub fn double(x : i32) -> i32 {
                 x * 2
@@ -118,7 +118,7 @@ mod test {
         );
 
         file_explorer.add_file(
-            "../marathon_utils/src/sum.rs",
+            "../../marathon_utils/src/sum.rs",
             r#"
             pub fn sum(x : i32, y : i32) -> i32 {
                 x + y
@@ -143,7 +143,7 @@ mod test {
         "#,
         );
         file_explorer.add_file(
-            "../algo_lib/src/geometry/convex_polygon_intersection.rs",
+            "../../algo_lib/src/geometry/convex_polygon_intersection.rs",
             r#"
 
             use super::half_plane_intersection::half_plane_intersection;
@@ -157,7 +157,7 @@ mod test {
         // Current generated output is NOT correct!
         // this file should be recursively included in the generated [main.rs]
         file_explorer.add_file(
-            "../algo_lib/src/geometry/half_plane_intersection.rs",
+            "../../algo_lib/src/geometry/half_plane_intersection.rs",
             r#"
 
             pub fn half_plane_intersection() {
@@ -220,7 +220,7 @@ mod test {
 
     fn add_new_io_templates(file_explorer: &mut FakeFileExplorer) {
         file_explorer.add_file(
-            "../templates/main/main.rs",
+            "../../templates/main/main.rs",
             r#"
         fn main() {
             $INPUT
@@ -231,7 +231,7 @@ mod test {
         );
 
         file_explorer.add_file(
-            "../templates/main/stdin.rs",
+            "../../templates/main/stdin.rs",
             r#"
             let mut sin = std::io::stdin();
             let input = if $INTERACTIVE {
@@ -243,7 +243,7 @@ mod test {
         );
 
         file_explorer.add_file(
-            "../templates/main/stdout.rs",
+            "../../templates/main/stdout.rs",
             r#"
             let mut stdout = std::io::stdout();
             let output = if $INTERACTIVE {
@@ -251,6 +251,12 @@ mod test {
             } else {
                 crate::io::output::Output::new(&mut stdout)
             };
+            "#,
+        );
+
+        file_explorer.add_file(
+            "../../templates/classic.rs",
+            r#"
             "#,
         );
     }
