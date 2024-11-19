@@ -1,9 +1,5 @@
 # rust-competitive-helper
 How to use it:
-- Switch default rust toolchain to nightly: 
-    ```
-    rustup default nightly
-    ```
 - Install rust-competitive-helper binary:
     ```
     cargo install --git https://github.com/rust-competitive-helper/rust-competitive-helper
@@ -27,7 +23,7 @@ Default locations:
 - Windows: C:\Users\Alice\AppData\Roaming\Foo Corp\rust-competitive-helper
 - macOS:   /Users/Alice/Library/Preferences/rust-competitive-helper
  
-By default CLion is used to open newly created task, but you can 
+By default RustRover is used to open newly created task, but you can 
 override it to use vscode for example:
 ```
 open_task_command = [
