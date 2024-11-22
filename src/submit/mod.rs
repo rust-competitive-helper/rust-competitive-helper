@@ -23,10 +23,10 @@ pub fn submit() {
         .to_string();
     let site = url.split('/').nth(2).unwrap_or("Manual");
     match site {
-        "codeforces.com" | "codechef.com" | "contest.yandex.com" => {
+        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com" | "contest.ucup.ac" => {
             submitter::submit(&url);
         }
-        "atcoder.jp" | "www.hackerrank.com" | "yukicoder.me" => {
+        "www.hackerrank.com" | "yukicoder.me" => {
             oj::submit(&url);
         }
         "open.kattis.com" => {
