@@ -23,7 +23,7 @@ pub fn submit() {
         .to_string();
     let site = url.split('/').nth(2).unwrap_or("Manual");
     match site {
-        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com" | "contest.ucup.ac" | "luogo.cn" => {
+        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com" | "contest.ucup.ac" | "www.luogo.com.cn" => {
             submitter::submit(&url);
         }
         "www.hackerrank.com" | "yukicoder.me" => {
