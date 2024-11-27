@@ -7,6 +7,7 @@ mod submitter;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use crossterm::execute;
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
+use regex::Regex;
 use rust_competitive_helper_util::{read_from_file, read_lines};
 use std::process::Command;
 
@@ -21,9 +22,16 @@ pub fn submit() {
         .1
         .trim()
         .to_string();
-    let site = url.split('/').nth(2).unwrap_or("Manual");
-    match site {
-        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com" | "contest.ucup.ac" | "www.luogo.com.cn" => {
+    let url_regex = Regex::new(r"https?://(?:www\.)?([^/]+).*").unwrap();
+    let site = {
+        match url_regex.captures(&url) {
+            None => String::new(),
+            Some(caps) => caps[1].to_string(),
+        }
+    };
+    match site.as_str() {
+        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com"
+        | "contest.ucup.ac" | "www.luogu.com.cn" | "toph.co" => {
             submitter::submit(&url);
         }
         "www.hackerrank.com" | "yukicoder.me" => {
