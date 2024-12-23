@@ -163,6 +163,46 @@ pub fn create(task: Task) {
     };
     main = main.replace("$CARET", "");
     main = main.replace("$TASK", name.as_str());
+    match task.input.io_type {
+        IOEnum::StdIn => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/stdin.rs").unwrap(),
+            );
+        }
+        IOEnum::Regex => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/regex.rs").unwrap(),
+            );
+        }
+        IOEnum::File => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/file_in.rs").unwrap(),
+            );
+        }
+        IOEnum::StdOut => {
+            unreachable!()
+        }
+    }
+    match task.output.io_type {
+        IOEnum::StdOut => {
+            main = main.replace(
+                "$OUTPUT",
+                &read_from_file("templates/main/stdout.rs").unwrap(),
+            );
+        }
+        IOEnum::File => {
+            main = main.replace(
+                "$OUTPUT",
+                &read_from_file("templates/main/file_out.rs").unwrap(),
+            );
+        }
+        IOEnum::Regex | IOEnum::StdIn => {
+            unreachable!()
+        }
+    }
     write_to_file(format!("tasks/{}/src/main.rs", name), main);
     if Path::new("templates/tester.rs").exists() {
         let mut tester =

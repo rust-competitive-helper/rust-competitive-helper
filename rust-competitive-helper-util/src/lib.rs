@@ -1,7 +1,10 @@
 pub mod build;
 mod file_explorer;
+mod new_build;
+mod old_build;
 mod tests;
 
+use crate::file_explorer::FileExplorer;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fs::File;
@@ -134,4 +137,19 @@ pub fn write_lines<P: AsRef<Path>, C: Into<String>>(filename: P, lines: Vec<C>) 
         file.write_all("\n".as_bytes()).unwrap();
     }
     file.flush().unwrap();
+}
+
+pub(crate) fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
+    // Task json should be written in the first line of the main.rs
+    let first_line = file_explorer
+        .read_file("src/main.rs")
+        .unwrap()
+        .into_iter()
+        .find(|s| !s.trim().is_empty())?;
+    let first_line = first_line.trim();
+    if !first_line.starts_with("//") {
+        return None;
+    }
+    let first_line = &first_line[2..];
+    serde_json::from_str::<Task>(first_line).ok()
 }
