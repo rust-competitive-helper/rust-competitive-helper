@@ -1,30 +1,33 @@
+use crate::config::Config;
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
+use rand::{random, Rng};
 use rust_competitive_helper_util::{
-    read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Languages, Task,
-    TaskClass, Test, TestType,
+    read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Task, Test, TestType,
 };
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::config::Config;
-
 pub fn task_name(task: &Task) -> String {
     let mut res = String::new();
-    let mut last_uppercase = true;
-    for c in task.languages.java.task_class.chars() {
-        if c.is_uppercase() {
-            if !last_uppercase || res.len() == 1 {
+    for c in task.name.chars() {
+        if c.is_whitespace() {
+            if !res.is_empty() && !res.ends_with('_') {
                 res.push('_');
             }
-            last_uppercase = true;
+        } else if c.is_ascii_alphabetic() {
             res.push(c.to_ascii_lowercase());
-        } else {
-            last_uppercase = false;
+        } else if c.is_ascii_digit() {
+            if res.is_empty() {
+                res.push_str("task_");
+            }
             res.push(c);
         }
+    }
+    if res.is_empty() {
+        res.push_str(&format!("task_{}", random.gen_range(0..10000)));
     }
     res
 }
@@ -346,11 +349,6 @@ pub fn create_task_wizard() {
         test_type: select_test_type(),
         input: select_input_type(),
         output: select_output_type(),
-        languages: Languages {
-            java: TaskClass {
-                task_class: name.replace(' ', ""),
-            },
-        },
     };
     create(task);
 }

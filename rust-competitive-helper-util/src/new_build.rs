@@ -74,6 +74,7 @@ impl Library {
                 fqn.push(token.strip_suffix(".rs").unwrap_or(token).to_string());
             }
             let mut visitor = MacroVisitor::default();
+            eprintln!("{} {:?}", path, fqn);
             visitor.visit_file(&syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap());
             for macro_name in visitor.0 {
                 self.macros.insert(
@@ -174,9 +175,12 @@ impl<FE: FileExplorer> VisitMut for Visitor<FE> {
         if !retain {
             *i = Item::Verbatim(Default::default());
         } else {
-            for i in (0..attrs.len()).rev() {
-                if attrs[i].path().is_ident("cfg") {
-                    attrs.swap_remove(i);
+            let mut id = 0;
+            while id < attrs.len() {
+                if attrs[id].path().is_ident("cfg") || attrs[id].path().is_ident("allow") {
+                    attrs.swap_remove(id);
+                } else {
+                    id += 1;
                 }
             }
             visit_item_mut(self, i);

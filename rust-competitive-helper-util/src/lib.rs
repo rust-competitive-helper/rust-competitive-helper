@@ -40,17 +40,6 @@ pub struct Test {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct TaskClass {
-    #[serde(rename = "taskClass")]
-    pub task_class: String,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Languages {
-    pub java: TaskClass,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
 pub enum TestType {
     #[serde(rename = "single")]
     Single,
@@ -90,7 +79,6 @@ pub struct Task {
     pub test_type: TestType,
     pub input: IOType,
     pub output: IOType,
-    pub languages: Languages,
 }
 
 pub fn read_from_file<P: AsRef<Path>>(filename: P) -> Option<String> {
