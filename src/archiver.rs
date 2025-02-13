@@ -109,7 +109,7 @@ fn ask_archive(task_name: String, selection: usize) {
             main.extend_from_slice(tester.as_slice());
             main.push("}".to_string());
             let mut test_lines = Vec::new();
-            test_lines.push("#![allow(unexpected_cfgs)]");
+            test_lines.push("#![allow(unexpected_cfgs)]".to_string());
             let mut in_main = false;
             for mut line in main {
                 if line

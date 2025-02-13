@@ -2,7 +2,7 @@ use crate::config::Config;
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
-use rand::{random, Rng};
+use rand::random;
 use rust_competitive_helper_util::{
     read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Task, Test, TestType,
 };
@@ -27,7 +27,7 @@ pub fn task_name(task: &Task) -> String {
         }
     }
     if res.is_empty() {
-        res.push_str(&format!("task_{}", random.gen_range(0..10000)));
+        res.push_str(&format!("task_{}", random::<u16>()));
     }
     res
 }
