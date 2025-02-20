@@ -13,7 +13,7 @@ use std::path::Path;
 pub fn task_name(task: &Task) -> String {
     let mut res = String::new();
     for c in task.name.chars() {
-        if c.is_whitespace() {
+        if !c.is_ascii_alphanumeric() {
             if !res.is_empty() && !res.ends_with('_') {
                 res.push('_');
             }
