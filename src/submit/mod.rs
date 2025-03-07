@@ -20,7 +20,7 @@ pub fn submit() {
         .split_at(2)
         .1
         .trim()
-        .to_string();
+        .replace("https://mirror.", "https://");
     let url_regex = Regex::new(r"https?://(?:www\.)?([^/]+).*").unwrap();
     let site = {
         match url_regex.captures(&url) {
@@ -30,7 +30,7 @@ pub fn submit() {
     };
     match site.as_str() {
         "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com"
-        | "contest.ucup.ac" | "luogu.com.cn" | "toph.co" => {
+        | "contest.ucup.ac" | "toph.co" => {
             submitter::submit(&url);
         }
         "hackerrank.com" | "yukicoder.me" => {
