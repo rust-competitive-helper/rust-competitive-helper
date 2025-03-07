@@ -28,26 +28,22 @@ pub fn submit() {
             Some(caps) => caps[1].to_string(),
         }
     };
-    match site.as_str() {
+    let submitted = match site.as_str() {
         "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com"
-        | "contest.ucup.ac" | "toph.co" => {
-            submitter::submit(&url);
-        }
-        "hackerrank.com" | "yukicoder.me" => {
-            oj::submit(&url);
-        }
-        "open.kattis.com" => {
-            kattis::submit(&url);
-        }
-        "dmoj.ca" => {
-            dmoj::submit(&url);
-        }
-        _ => {
-            println!("Unsupported site, code copied to clipboard: {}", site);
-            let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-            ctx.set_contents(read_from_file("main/src/main.rs").unwrap())
-                .unwrap();
-        }
+        | "contest.ucup.ac" | "toph.co" => submitter::submit(&url),
+        "hackerrank.com" | "yukicoder.me" => oj::submit(&url),
+        "open.kattis.com" => kattis::submit(&url),
+        "dmoj.ca" => dmoj::submit(&url),
+        _ => false,
+    };
+    if !submitted {
+        println!(
+            "Unsupported site or error submitting, code copied to clipboard: {}",
+            site
+        );
+        let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+        ctx.set_contents(read_from_file("main/src/main.rs").unwrap())
+            .unwrap();
     }
 }
 
