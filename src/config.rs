@@ -22,7 +22,7 @@ impl Default for Config {
             .map(|s| s.to_owned())
             .to_vec()
         } else {
-            let clion_path = std::env::var("HOME").unwrap() + "/.local/bin/clion";
+            let clion_path = std::env::var("HOME").unwrap() + "/.local/bin/rustrover";
             [
                 &clion_path,
                 "--line",
