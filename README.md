@@ -1,5 +1,9 @@
 # rust-competitive-helper
 How to use it:
+- Install extra libraries:
+  ```
+  sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+  ```
 - Install rust-competitive-helper binary:
     ```
     cargo install --git https://github.com/rust-competitive-helper/rust-competitive-helper
