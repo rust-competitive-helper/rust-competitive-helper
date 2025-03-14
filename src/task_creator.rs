@@ -1,30 +1,33 @@
+use crate::config::Config;
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
+use rand::random;
 use rust_competitive_helper_util::{
-    read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Languages, Task,
-    TaskClass, Test, TestType,
+    read_from_file, read_lines, write_lines, write_to_file, IOEnum, IOType, Task, Test, TestType,
 };
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::config::Config;
-
 pub fn task_name(task: &Task) -> String {
     let mut res = String::new();
-    let mut last_uppercase = true;
-    for c in task.languages.java.task_class.chars() {
-        if c.is_uppercase() {
-            if !last_uppercase || res.len() == 1 {
+    for c in task.name.chars() {
+        if !c.is_ascii_alphanumeric() {
+            if !res.is_empty() && !res.ends_with('_') {
                 res.push('_');
             }
-            last_uppercase = true;
+        } else if c.is_ascii_alphabetic() {
             res.push(c.to_ascii_lowercase());
-        } else {
-            last_uppercase = false;
+        } else if c.is_ascii_digit() {
+            if res.is_empty() {
+                res.push_str("task_");
+            }
             res.push(c);
         }
+    }
+    if res.is_empty() {
+        res.push_str(&format!("task_{}", random::<u16>()));
     }
     res
 }
@@ -163,6 +166,46 @@ pub fn create(task: Task) {
     };
     main = main.replace("$CARET", "");
     main = main.replace("$TASK", name.as_str());
+    match task.input.io_type {
+        IOEnum::StdIn => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/stdin.rs").unwrap(),
+            );
+        }
+        IOEnum::Regex => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/regex.rs").unwrap(),
+            );
+        }
+        IOEnum::File => {
+            main = main.replace(
+                "$INPUT",
+                &read_from_file("templates/main/file_in.rs").unwrap(),
+            );
+        }
+        IOEnum::StdOut => {
+            unreachable!()
+        }
+    }
+    match task.output.io_type {
+        IOEnum::StdOut => {
+            main = main.replace(
+                "$OUTPUT",
+                &read_from_file("templates/main/stdout.rs").unwrap(),
+            );
+        }
+        IOEnum::File => {
+            main = main.replace(
+                "$OUTPUT",
+                &read_from_file("templates/main/file_out.rs").unwrap(),
+            );
+        }
+        IOEnum::Regex | IOEnum::StdIn => {
+            unreachable!()
+        }
+    }
     write_to_file(format!("tasks/{}/src/main.rs", name), main);
     if Path::new("templates/tester.rs").exists() {
         let mut tester =
@@ -306,11 +349,6 @@ pub fn create_task_wizard() {
         test_type: select_test_type(),
         input: select_input_type(),
         output: select_output_type(),
-        languages: Languages {
-            java: TaskClass {
-                task_class: name.replace(' ', ""),
-            },
-        },
     };
     create(task);
 }
