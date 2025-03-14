@@ -1,13 +1,15 @@
-use crate::submit::{check_available, failure};
+use crate::submit::failure;
 use std::process::Command;
 
 pub(crate) fn submit(url: &str) -> bool {
-    if !check_available("submitter") {
-        failure("Please install submitter from https://github.com/EgorKulikov/submitter");
-        return false;
-    }
-    Command::new("submitter")
+    match Command::new("submitter")
         .args([url, "rust", "main/src/main.rs"])
         .status()
-        .is_ok()
+    {
+        Ok(_) => true,
+        Err(_) => {
+            failure("Submitter run was not successful. If it is not installed please install submitter from https://github.com/EgorKulikov/submitter");
+            false
+        }
+    }
 }

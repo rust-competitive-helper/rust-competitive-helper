@@ -1,4 +1,4 @@
-use crate::submit::{check_available, failure};
+use crate::submit::failure;
 use regex::Regex;
 use std::process::Command;
 
@@ -13,11 +13,7 @@ pub(crate) fn submit(url: &str) -> bool {
             Some(caps) => caps[1].to_string(),
         }
     };
-    if !check_available("dmoj-submit") {
-        failure("Please install dmoj-submit from https://github.com/nils-emmenegger/dmoj-submit");
-        return false;
-    }
-    Command::new("dmoj-submit")
+    match Command::new("dmoj-submit")
         .args([
             "submit",
             "--problem",
@@ -27,5 +23,11 @@ pub(crate) fn submit(url: &str) -> bool {
             "main/src/main.rs",
         ])
         .status()
-        .is_ok()
+    {
+        Ok(_) => true,
+        Err(_) => {
+            failure("dmoj-submit run was not successful. If it is not installed please install dmoj-submit from https://github.com/nils-emmenegger/dmoj-submit");
+            false
+        }
+    }
 }

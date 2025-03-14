@@ -1,4 +1,4 @@
-use crate::submit::{check_available, failure};
+use crate::submit::failure;
 use regex::Regex;
 use std::process::Command;
 
@@ -13,12 +13,14 @@ pub(crate) fn submit(url: &str) -> bool {
             Some(caps) => caps[1].to_string(),
         }
     };
-    if !check_available("kattis") {
-        failure("Please install kattis-cli from https://github.com/Kattis/kattis-cli");
-        return false;
-    }
-    Command::new("kattis")
+    match Command::new("kattis")
         .args(["main/src/main.rs", "-p", problem_id.as_str(), "-f"])
         .status()
-        .is_ok()
+    {
+        Ok(_) => true,
+        Err(_) => {
+            failure("kattis-cli run was not successful. If it is not installed please install kattis-cli from https://github.com/Kattis/kattis-cli");
+            false
+        }
+    }
 }

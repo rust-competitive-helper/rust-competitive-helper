@@ -8,7 +8,6 @@ use crossterm::execute;
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use regex::Regex;
 use rust_competitive_helper_util::{read_from_file, read_lines};
-use std::process::Command;
 
 pub fn submit() {
     let file = "main/src/main.rs";
@@ -52,10 +51,4 @@ fn failure(s: &str) {
     let _ = execute!(stdout, SetForegroundColor(Color::Red));
     println!("{s}");
     let _ = execute!(stdout, ResetColor);
-}
-
-fn check_available(name: &str) -> bool {
-    let which_output = Command::new("which").arg(name).output().unwrap();
-    assert!(which_output.status.success());
-    !String::from_utf8_lossy(&which_output.stdout).starts_with(&format!("which: no {} in", name))
 }
