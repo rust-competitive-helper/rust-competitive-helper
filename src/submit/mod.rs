@@ -43,12 +43,17 @@ pub fn submit() {
         .trim()
         .replace("https://mirror.", "https://");
     let site = extract_site(&url);
+    let quoted_url = if url.contains(|c: char| !c.is_ascii_alphanumeric() && !"-._~:/?[]@!$'+,;=%".contains(c)) {
+        format!("\"{}\"", url)
+    } else {
+        url
+    };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis" => {
-            submitter::submit(&url)
+            submitter::submit(&quoted_url)
         }
-        "hackerrank" | "yukicoder" => oj::submit(&url),
-        "dmoj" => dmoj::submit(&url),
+        "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
+        "dmoj" => dmoj::submit(&quoted_url),
         _ => false,
     };
     if !submitted {
