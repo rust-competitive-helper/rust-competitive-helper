@@ -1,5 +1,4 @@
 mod dmoj;
-mod kattis;
 mod oj;
 mod submitter;
 
@@ -8,6 +7,29 @@ use crossterm::execute;
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use regex::Regex;
 use rust_competitive_helper_util::{read_from_file, read_lines};
+
+fn extract_site(url: &str) -> String {
+    let url_regex = Regex::new(r"https?://(?:www\.)?([^/]+)").unwrap();
+    match url_regex.captures(url) {
+        None => String::new(),
+        Some(caps) => {
+            let host = &caps[1];
+            let parts: Vec<&str> = host.split('.').collect();
+            // Skip TLD parts from the end to find the second-level domain
+            // e.g. "codeforces.com" -> "codeforces", "contest.yandex.com" -> "yandex"
+            //      "luogu.com.cn" -> "luogu"
+            let tlds = [
+                "com", "org", "net", "co", "ac", "me", "ca", "cn", "ru", "jp",
+            ];
+            let sld = parts
+                .iter()
+                .rev()
+                .find(|p| !tlds.contains(p))
+                .unwrap_or(&"");
+            sld.to_string()
+        }
+    }
+}
 
 pub fn submit() {
     let file = "main/src/main.rs";
@@ -20,19 +42,13 @@ pub fn submit() {
         .1
         .trim()
         .replace("https://mirror.", "https://");
-    let url_regex = Regex::new(r"https?://(?:www\.)?([^/]+).*").unwrap();
-    let site = {
-        match url_regex.captures(&url) {
-            None => String::new(),
-            Some(caps) => caps[1].to_string(),
-        }
-    };
+    let site = extract_site(&url);
     let submitted = match site.as_str() {
-        "atcoder.jp" | "codeforces.com" | "codechef.com" | "contest.yandex.com"
-        | "contest.ucup.ac" | "toph.co" => submitter::submit(&url),
-        "hackerrank.com" | "yukicoder.me" => oj::submit(&url),
-        "open.kattis.com" => kattis::submit(&url),
-        "dmoj.ca" => dmoj::submit(&url),
+        "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis" => {
+            submitter::submit(&url)
+        }
+        "hackerrank" | "yukicoder" => oj::submit(&url),
+        "dmoj" => dmoj::submit(&url),
         _ => false,
     };
     if !submitted {
@@ -51,4 +67,42 @@ fn failure(s: &str) {
     let _ = execute!(stdout, SetForegroundColor(Color::Red));
     println!("{s}");
     let _ = execute!(stdout, ResetColor);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_site;
+
+    #[test]
+    fn test_extract_site() {
+        assert_eq!(
+            extract_site("https://codeforces.com/contest/123"),
+            "codeforces"
+        );
+        assert_eq!(extract_site("https://contest.yandex.com/foo"), "yandex");
+        assert_eq!(
+            extract_site("https://open.kattis.com/problems/abc"),
+            "kattis"
+        );
+        assert_eq!(extract_site("https://dmoj.ca/problem/abc"), "dmoj");
+        assert_eq!(extract_site("https://codechef.com/abc"), "codechef");
+        assert_eq!(extract_site("https://contest.ucup.ac/foo"), "ucup");
+        assert_eq!(extract_site("https://eolymp.com/foo"), "eolymp");
+        assert_eq!(extract_site("https://toph.co/foo"), "toph");
+        assert_eq!(extract_site("https://hackerrank.com/foo"), "hackerrank");
+        assert_eq!(extract_site("https://yukicoder.me/foo"), "yukicoder");
+        assert_eq!(extract_site("https://www.luogu.com.cn/foo"), "luogu");
+        assert_eq!(extract_site("https://uoj.ac/foo"), "uoj");
+    }
+
+    #[test]
+    fn test_extract_site_no_path() {
+        assert_eq!(extract_site("https://codeforces.com"), "codeforces");
+        assert_eq!(extract_site("https://dmoj.ca"), "dmoj");
+    }
+
+    #[test]
+    fn test_extract_site_invalid() {
+        assert_eq!(extract_site("not a url"), "");
+    }
 }

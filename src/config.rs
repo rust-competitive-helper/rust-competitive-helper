@@ -1,11 +1,16 @@
 use itertools::Itertools;
-use std::{collections::HashMap, process::Command};
+use std::path::Path;
+use std::{collections::HashMap, fs, process::Command};
 
 use serde::{Deserialize, Serialize};
+
+const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     open_task_command: Vec<String>,
+    pub input_file_extension: String,
+    pub output_file_extension: String,
 }
 
 impl Default for Config {
@@ -34,24 +39,53 @@ impl Default for Config {
             .map(|s| s.to_owned())
             .to_vec()
         };
-        Self { open_task_command }
+        Self {
+            open_task_command,
+            input_file_extension: ".in".to_string(),
+            output_file_extension: ".out".to_string(),
+        }
+    }
+}
+
+fn global_config_path() -> Option<String> {
+    if cfg!(windows) {
+        std::env::var("APPDATA")
+            .ok()
+            .map(|p| format!("{}/rust-competitive-helper/default-config.toml", p))
+    } else {
+        std::env::var("HOME")
+            .ok()
+            .map(|p| format!("{}/.config/rust-competitive-helper/default-config.toml", p))
     }
 }
 
 impl Config {
-    ///
-    /// Default config locations by confy:
-    ///
-    /// Linux:   /home/alice/.config/barapp
-    ///
-    /// Windows: C:\Users\Alice\AppData\Roaming\Foo Corp\Bar App
-    ///
-    /// macOS:   /Users/Alice/Library/Preferences/com.Foo-Corp.Bar-App
-    ///
-    ///
     pub fn load() -> Self {
-        confy::load("rust-competitive-helper")
-            .expect("Can't load config for rust-competitive-helper")
+        if Path::new(CONFIG_FILE).exists() {
+            let content =
+                fs::read_to_string(CONFIG_FILE).expect("Can't read config.toml");
+            Config::from_toml(&content)
+        } else {
+            // Try to migrate from global confy config
+            let config = match global_config_path() {
+                Some(path) if Path::new(&path).exists() => {
+                    let content =
+                        fs::read_to_string(&path).expect("Can't read global config");
+                    Config::from_toml(&content)
+                }
+                _ => Config::default(),
+            };
+            fs::write(CONFIG_FILE, config.to_toml()).expect("Can't write config.toml");
+            config
+        }
+    }
+
+    pub fn from_toml(content: &str) -> Self {
+        toml::from_str(content).expect("Can't parse config")
+    }
+
+    pub fn to_toml(&self) -> String {
+        toml::to_string(self).expect("Can't serialize config")
     }
 
     pub fn run_open_task_command(
@@ -74,7 +108,7 @@ impl Config {
             .output()
             .map_err(|err| {
                 format!(
-                    "'{}': check config file", // TODO provide path for config file, confy-0.5 will have get_configuration_file_path
+                    "'{}': check config.toml",
                     match err.kind() {
                         std::io::ErrorKind::NotFound => format!("{} not found", &terms[0]),
                         _ => format!(
@@ -85,5 +119,41 @@ impl Config {
                     }
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn test_roundtrip() {
+        let config = Config::default();
+        let toml = config.to_toml();
+        let parsed = Config::from_toml(&toml);
+        assert_eq!(parsed.input_file_extension, ".in");
+        assert_eq!(parsed.output_file_extension, ".out");
+    }
+
+    #[test]
+    fn test_parse_custom_extensions() {
+        let toml = r#"
+open_task_command = ["echo"]
+input_file_extension = ".input"
+output_file_extension = ".answer"
+"#;
+        let config = Config::from_toml(toml);
+        assert_eq!(config.input_file_extension, ".input");
+        assert_eq!(config.output_file_extension, ".answer");
+    }
+
+    #[test]
+    fn test_parse_old_config_without_extensions() {
+        // Old confy configs won't have the new fields - deserialization will fail
+        let toml = r#"
+open_task_command = ["rustrover", "--line", "$LINE", "--column", "$COLUMN", "$FILE"]
+"#;
+        let result: Result<Config, _> = toml::from_str(toml);
+        assert!(result.is_err());
     }
 }

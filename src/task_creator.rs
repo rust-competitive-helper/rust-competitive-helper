@@ -103,12 +103,12 @@ pub fn get_io_settings(task: &Task) -> String {
     )
 }
 
-fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
+fn generate_new_cargo_toml_content(config: &Config, task_name: &str) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     for l in read_lines("Cargo.toml").unwrap() {
         if l.contains(format!("\"tasks/{}\"", task_name).as_str()) {
             eprintln!("Task {} exists", task_name);
-            open_task(task_name.to_string(), None);
+            open_task(config, task_name.to_string(), None);
             return None;
         }
         lines.push(l.clone());
@@ -120,9 +120,10 @@ fn generate_new_cargo_toml_content(task_name: &str) -> Option<Vec<String>> {
 }
 
 pub fn create(task: Task) {
+    let config = Config::load();
     let name = task_name(&task);
 
-    let new_cargo_toml_content = match generate_new_cargo_toml_content(&name) {
+    let new_cargo_toml_content = match generate_new_cargo_toml_content(&config, &name) {
         Some(content) => content,
         None => return,
     };
@@ -130,8 +131,14 @@ pub fn create(task: Task) {
     fs::create_dir_all(format!("tasks/{}/src", name)).unwrap();
     fs::create_dir_all(format!("tasks/{}/tests", name)).unwrap();
     for (i, test) in task.tests.iter().enumerate() {
-        write_to_file(format!("tasks/{}/tests/{}.in", name, i + 1), &test.input);
-        write_to_file(format!("tasks/{}/tests/{}.out", name, i + 1), &test.output);
+        write_to_file(
+            format!("tasks/{}/tests/{}{}", name, i + 1, config.input_file_extension),
+            &test.input,
+        );
+        write_to_file(
+            format!("tasks/{}/tests/{}{}", name, i + 1, config.output_file_extension),
+            &test.output,
+        );
     }
     write_to_file(
         format!("tasks/{}/build.rs", name),
@@ -178,12 +185,18 @@ pub fn create(task: Task) {
                 "$INPUT",
                 &read_from_file("templates/main/regex.rs").unwrap(),
             );
+            if let Some(pattern) = &task.input.pattern {
+                main = main.replace("$PATTERN", pattern.as_str());
+            }
         }
         IOEnum::File => {
             main = main.replace(
                 "$INPUT",
                 &read_from_file("templates/main/file_in.rs").unwrap(),
             );
+            if let Some(file_name) = &task.input.file_name {
+                main = main.replace("$IN_FILE", file_name.as_str());
+            }
         }
         IOEnum::StdOut => {
             unreachable!()
@@ -201,6 +214,9 @@ pub fn create(task: Task) {
                 "$OUTPUT",
                 &read_from_file("templates/main/file_out.rs").unwrap(),
             );
+            if let Some(file_name) = &task.output.file_name {
+                main = main.replace("$OUT_FILE", file_name.as_str());
+            }
         }
         IOEnum::Regex | IOEnum::StdIn => {
             unreachable!()
@@ -223,11 +239,10 @@ pub fn create(task: Task) {
 
     write_lines("Cargo.toml", new_cargo_toml_content);
     println!("Task {} parsed!", name);
-    open_task(name, Some((row, col)));
+    open_task(&config, name, Some((row, col)));
 }
 
-fn open_task(name: String, coords: Option<(i32, i32)>) {
-    let config = Config::load();
+fn open_task(config: &Config, name: String, coords: Option<(i32, i32)>) {
     let open_task_result = {
         let mut templates_args: HashMap<String, String> = HashMap::new();
         templates_args.insert("$NAME".to_owned(), name.clone());
@@ -351,4 +366,52 @@ pub fn create_task_wizard() {
         output: select_output_type(),
     };
     create(task);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::task_name;
+    use rust_competitive_helper_util::{IOEnum, IOType, Task, TestType};
+
+    fn make_task(name: &str) -> Task {
+        Task {
+            name: name.to_string(),
+            group: String::new(),
+            url: String::new(),
+            interactive: false,
+            time_limit: 2000,
+            tests: vec![],
+            test_type: TestType::Single,
+            input: IOType {
+                io_type: IOEnum::StdIn,
+                file_name: None,
+                pattern: None,
+            },
+            output: IOType {
+                io_type: IOEnum::StdOut,
+                file_name: None,
+                pattern: None,
+            },
+        }
+    }
+
+    #[test]
+    fn test_task_name_simple() {
+        assert_eq!(task_name(&make_task("A - Problem Name")), "a_problem_name");
+    }
+
+    #[test]
+    fn test_task_name_digits() {
+        assert_eq!(task_name(&make_task("123")), "task_123");
+    }
+
+    #[test]
+    fn test_task_name_special_chars() {
+        assert_eq!(task_name(&make_task("A+B")), "a_b");
+    }
+
+    #[test]
+    fn test_task_name_trailing_special() {
+        assert_eq!(task_name(&make_task("abc---")), "abc_");
+    }
 }

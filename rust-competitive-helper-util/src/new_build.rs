@@ -23,6 +23,7 @@ pub struct Library {
 
 impl Library {
     fn new(name: &str) -> Self {
+        eprintln!("Library: {}", name);
         assert!(Self::is_library(name));
         let path = Self::path(name);
         let mut res = Self {

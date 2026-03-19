@@ -77,12 +77,12 @@ fn ask_archive(task_name: String, selection: usize) {
             serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
                 .unwrap();
         let path = format!(
-            "archive/{}/{:02}/{:02}.{:02}.{} - {}",
+            "archive/{}/{:02}/{}.{:02}.{:02} - {}",
+            now.year(),
+            now.month(),
             now.year(),
             now.month(),
             now.day(),
-            now.month(),
-            now.year(),
             contest_name(&task.group),
         );
         let path = path.replace(':', "_");
@@ -177,6 +177,17 @@ pub fn archive() {
     let selection = selection.unwrap();
     let mut tasks = contest_list[selection].1.clone();
     tasks.sort();
+
+    if tasks.len() == 1 {
+        let option = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(format!("{}:", tasks[0]))
+            .default(2)
+            .items(&OPTIONS[..])
+            .interact_on(&Term::stdout())
+            .unwrap();
+        ask_archive(tasks.remove(0), option);
+        return;
+    }
 
     let mut selection = vec![2; tasks.len()];
 

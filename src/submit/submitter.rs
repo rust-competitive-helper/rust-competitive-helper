@@ -3,7 +3,7 @@ use std::process::Command;
 
 pub(crate) fn submit(url: &str) -> bool {
     match Command::new("submitter")
-        .args([url, "rust", "main/src/main.rs"])
+        .args([&format!("\"{}\"", url), "rust", "main/src/main.rs"])
         .status()
     {
         Ok(_) => true,

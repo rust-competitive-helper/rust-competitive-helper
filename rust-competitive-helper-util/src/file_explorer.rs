@@ -67,6 +67,7 @@ impl FileExplorer for RealFileExplorer {
     }
 }
 
+#[allow(dead_code)]
 pub struct FakeFileExplorer {
     files: HashMap<String, Vec<String>>,
 }
