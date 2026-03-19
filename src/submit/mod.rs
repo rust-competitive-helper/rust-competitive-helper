@@ -41,9 +41,11 @@ pub fn submit() {
         .split_at(2)
         .1
         .trim()
-        .replace("https://mirror.", "https://");
+        .to_string();
     let site = extract_site(&url);
-    let quoted_url = if url.contains(|c: char| !c.is_ascii_alphanumeric() && !"-._~:/?[]@!$'+,;=%".contains(c)) {
+    let quoted_url = if url
+        .contains(|c: char| !c.is_ascii_alphanumeric() && !"-._~:/?[]@!$'+,;=%".contains(c))
+    {
         format!("\"{}\"", url)
     } else {
         url
