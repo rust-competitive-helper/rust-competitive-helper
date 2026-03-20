@@ -51,9 +51,8 @@ pub fn submit() {
         url
     };
     let submitted = match site.as_str() {
-        "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis" => {
-            submitter::submit(&quoted_url)
-        }
+        "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
+        | "atcoder" => submitter::submit(&quoted_url),
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
         _ => false,
