@@ -2,10 +2,8 @@
 mod test {
     use expect_test::expect_file;
 
-    use crate::{
-        build::build_several_libraries_impl,
-        file_explorer::{FakeFileExplorer, FileExplorer},
-    };
+    use crate::file_explorer::{FakeFileExplorer, FileExplorer};
+    use crate::old_build::build_several_libraries_impl;
 
     fn gen_code<F: FileExplorer>(file_explorer: &mut F) -> String {
         build_several_libraries_impl(
