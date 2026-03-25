@@ -52,7 +52,7 @@ pub fn submit() {
     };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
-        | "atcoder" => submitter::submit(&quoted_url),
+        | "atcoder" | "luogu" => submitter::submit(&quoted_url),
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
         _ => false,
