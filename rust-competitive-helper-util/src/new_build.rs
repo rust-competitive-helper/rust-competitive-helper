@@ -360,28 +360,21 @@ impl<FE: FileExplorer> Visitor<FE> {
                 Self::add_code(&mut code, module);
             }
         }
+        let mut library_code = String::new();
         println!("cargo:rerun-if-changed=.");
-        for library in self.content.clone().into_values() {
+        for library in self.content.values() {
             println!("cargo:rerun-if-changed=../../{}", library.root.name);
-            Self::add_code(&mut code, &library.root);
+            Self::add_code(&mut library_code, &library.root);
         }
+        if self.minimize {
+            let file = syn_old::parse_file(&library_code).unwrap();
+            library_code = rustminify::minify_file(&file).to_string();
+        }
+        code += &library_code;
         std::fs::File::create("../../main/src/main.rs")
             .unwrap()
             .write_all(code.as_bytes())
             .unwrap();
-        if self.minimize {
-            let file =
-                syn_old::parse_file(&std::fs::read_to_string("../../main/src/main.rs").unwrap())
-                    .unwrap();
-            let mut minimized = rustminify::minify_file(&file);
-            if let Some(task) = crate::parse_task(&self.file_explorer) {
-                minimized = format!("// {}\n", task.url) + &minimized;
-            }
-            std::fs::File::create("../../main/src/main.rs")
-                .unwrap()
-                .write_all(minimized.to_string().as_bytes())
-                .unwrap();
-        }
     }
 
     fn process_item_use_mut(&mut self, i: &mut ItemUse) -> bool {
