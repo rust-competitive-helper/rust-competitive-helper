@@ -47,6 +47,34 @@ impl Default for Config {
     }
 }
 
+fn to_windows_path_via_wslpath(path: &str) -> Option<String> {
+    let absolute = fs::canonicalize(path).ok()?;
+    let absolute_str = absolute.to_str()?;
+    let output = Command::new("wslpath")
+        .args(["-w", absolute_str])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let win_path = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    if win_path.is_empty() {
+        None
+    } else {
+        Some(win_path)
+    }
+}
+
+fn to_absolute_path(path: &str) -> Option<String> {
+    let path_buf = Path::new(path);
+    let absolute = if path_buf.is_absolute() {
+        path_buf.to_path_buf()
+    } else {
+        std::env::current_dir().ok()?.join(path_buf)
+    };
+    absolute.to_str().map(|s| s.to_owned())
+}
+
 fn global_config_path() -> Option<String> {
     if cfg!(windows) {
         std::env::var("APPDATA")
@@ -88,10 +116,45 @@ impl Config {
         toml::to_string(self).expect("Can't serialize config")
     }
 
+    // Relative `$FILE` paths break when the spawned Windows IDE can't inherit our
+    // CWD — e.g. a Windows .cmd launched from a Linux/WSL CWD falls back to
+    // C:\Windows and resolves the relative path there. Rewrite `$FILE` to an
+    // absolute Windows path so the IDE can actually find it.
+    fn adjust_template_args_for_wsl(
+        &self,
+        template_args: &HashMap<String, String>,
+    ) -> HashMap<String, String> {
+        let mut template_args = template_args.clone();
+        if !self.first_term_is_windows_executable() {
+            return template_args;
+        }
+        let Some(file) = template_args.get("$FILE").cloned() else {
+            return template_args;
+        };
+        let new_file = if cfg!(unix) {
+            to_windows_path_via_wslpath(&file)
+        } else {
+            to_absolute_path(&file)
+        };
+        if let Some(new_file) = new_file {
+            template_args.insert("$FILE".to_owned(), new_file);
+        }
+        template_args
+    }
+
+    fn first_term_is_windows_executable(&self) -> bool {
+        let first = match self.open_task_command.first() {
+            Some(first) => first.to_ascii_lowercase(),
+            None => return false,
+        };
+        first.ends_with(".cmd") || first.ends_with(".exe") || first.ends_with(".bat")
+    }
+
     pub fn run_open_task_command(
         &self,
         template_args: &HashMap<String, String>,
     ) -> Result<std::process::Output, String> {
+        let template_args = self.adjust_template_args_for_wsl(template_args);
         let terms: Vec<_> = self
             .open_task_command
             .iter()
