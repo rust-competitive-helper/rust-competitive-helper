@@ -1,4 +1,5 @@
 mod dmoj;
+mod domjudge_probe;
 mod oj;
 mod submitter;
 
@@ -48,14 +49,14 @@ pub fn submit() {
     {
         format!("\"{}\"", url)
     } else {
-        url
+        url.clone()
     };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
         | "atcoder" | "luogu" => submitter::submit(&quoted_url),
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
-        _ => false,
+        _ => domjudge_probe::is_domjudge(&url) && submitter::submit(&quoted_url),
     };
     if !submitted {
         println!(
