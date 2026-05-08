@@ -21,7 +21,8 @@ crossterm = "0.28"
 rand = "0.8"
 regex = "1.11"
 clipboard = "0.5"
-ureq = "2"
+ureq = { version = "2", features = ["json"] }
+base64 = "0.22"
 
 
 [workspace]

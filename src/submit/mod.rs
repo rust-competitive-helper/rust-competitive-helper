@@ -1,7 +1,8 @@
 mod dmoj;
-mod domjudge_probe;
 mod oj;
 mod submitter;
+
+use crate::domjudge;
 
 use clipboard::{ClipboardContext, ClipboardProvider};
 use crossterm::execute;
@@ -56,7 +57,7 @@ pub fn submit() {
         | "atcoder" | "luogu" => submitter::submit(&quoted_url),
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
-        _ => domjudge_probe::is_domjudge(&url) && submitter::submit(&quoted_url),
+        _ => domjudge::is_domjudge(&url) && submitter::submit(&quoted_url),
     };
     if !submitted {
         println!(
