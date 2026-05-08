@@ -11,6 +11,8 @@ pub struct Config {
     open_task_command: Vec<String>,
     pub input_file_extension: String,
     pub output_file_extension: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domjudge_server: Option<String>,
 }
 
 impl Default for Config {
@@ -43,6 +45,7 @@ impl Default for Config {
             open_task_command,
             input_file_extension: ".in".to_string(),
             output_file_extension: ".out".to_string(),
+            domjudge_server: None,
         }
     }
 }

@@ -1,4 +1,5 @@
-use crate::domjudge::{extract_base, is_domjudge, DomjudgeClient};
+use crate::config::Config;
+use crate::domjudge::DomjudgeClient;
 use rust_competitive_helper_util::{read_lines, Task};
 use std::fs;
 use std::path::Path;
@@ -7,29 +8,26 @@ const LANGUAGE: &str = "Rust";
 const MAIN_FILE: &str = "main/src/main.rs";
 
 pub fn print() {
-    let url = match read_url(MAIN_FILE) {
-        Some(u) => u,
+    let config = Config::load();
+    let Some(server) = config.domjudge_server.as_ref() else {
+        eprintln!("domjudge_server not set in config.toml");
+        return;
+    };
+    let name = match read_first_line_comment(MAIN_FILE) {
+        Some(n) => n,
         None => {
-            eprintln!("Could not read URL from {}", MAIN_FILE);
+            eprintln!("Could not read problem name from {}", MAIN_FILE);
             return;
         }
     };
-    let Some(base) = extract_base(&url) else {
-        eprintln!("Could not extract base URL from {}", url);
-        return;
-    };
-    if !is_domjudge(&url) {
-        eprintln!("URL {} does not point to a DOMjudge instance", url);
-        return;
-    }
-    let (task_name, source) = match find_task_source(&url) {
+    let (task_name, source) = match find_task_source(&name) {
         Some(p) => p,
         None => {
-            eprintln!("No task in tasks/ has matching URL {}", url);
+            eprintln!("No task in tasks/ matches problem name '{}'", name);
             return;
         }
     };
-    let mut client = DomjudgeClient::new(&base);
+    let mut client = DomjudgeClient::new(server);
     if let Err(e) = client.ensure_login() {
         eprintln!("Login failed: {}", e);
         return;
@@ -47,12 +45,12 @@ pub fn print() {
     }
 }
 
-fn read_url(path: &str) -> Option<String> {
+fn read_first_line_comment(path: &str) -> Option<String> {
     let line = read_lines(path).ok()?.into_iter().next()?;
     Some(line.split_at(2).1.trim().to_string())
 }
 
-fn find_task_source(url: &str) -> Option<(String, String)> {
+fn find_task_source(name: &str) -> Option<(String, String)> {
     let tasks_dir = Path::new("tasks");
     if !tasks_dir.is_dir() {
         return None;
@@ -76,7 +74,7 @@ fn find_task_source(url: &str) -> Option<(String, String)> {
             Ok(t) => t,
             Err(_) => continue,
         };
-        if task.url == url {
+        if task.name == name {
             let body = lines[1..].join("\n");
             return Some((task_name, body));
         }

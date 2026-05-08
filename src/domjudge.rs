@@ -3,7 +3,6 @@ use base64::Engine;
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Password};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -39,41 +38,8 @@ impl CookieStore {
     }
 }
 
-pub fn extract_base(url: &str) -> Option<String> {
-    let url = url.split('?').next().unwrap_or(url);
-    let url = url.split('#').next().unwrap_or(url);
-    let url = url.trim_end_matches('/');
-    let dj_re = Regex::new(
-        r"^(https?://[^/]+(?:/[^/]+)*?)/(?:team|public|jury|domjudge)/(?:problems|submit|submissions)/[^/]+",
-    )
-    .ok()?;
-    if let Some(caps) = dj_re.captures(url) {
-        return Some(caps[1].to_string());
-    }
-    let host_re = Regex::new(r"^(https?://[^/]+)").ok()?;
-    host_re.captures(url).map(|c| c[1].to_string())
-}
-
 fn agent(timeout: Duration) -> ureq::Agent {
     ureq::AgentBuilder::new().timeout(timeout).build()
-}
-
-pub fn is_domjudge(url: &str) -> bool {
-    let Some(base) = extract_base(url) else {
-        return false;
-    };
-    let endpoint = format!("{}/api/v4/info", base);
-    let resp = match agent(Duration::from_secs(5)).get(&endpoint).call() {
-        Ok(r) => r,
-        Err(_) => return false,
-    };
-    let body = match resp.into_string() {
-        Ok(b) => b,
-        Err(_) => return false,
-    };
-    serde_json::from_str::<serde_json::Value>(&body)
-        .map(|j| j.get("domjudge").is_some())
-        .unwrap_or(false)
 }
 
 fn basic_auth_header(user: &str, pass: &str) -> String {
@@ -180,44 +146,3 @@ impl DomjudgeClient {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::extract_base;
-
-    #[test]
-    fn extract_base_team_problem() {
-        assert_eq!(
-            extract_base("https://demo.domjudge.org/team/problems/3").as_deref(),
-            Some("https://demo.domjudge.org"),
-        );
-    }
-
-    #[test]
-    fn extract_base_subpath_install() {
-        assert_eq!(
-            extract_base("https://domjudge.iti.kit.edu/main/team/problems/3").as_deref(),
-            Some("https://domjudge.iti.kit.edu/main"),
-        );
-    }
-
-    #[test]
-    fn extract_base_with_query_and_fragment() {
-        assert_eq!(
-            extract_base("https://j.example.com/public/problems/abc?lang=en#x").as_deref(),
-            Some("https://j.example.com"),
-        );
-    }
-
-    #[test]
-    fn extract_base_falls_back_to_host() {
-        assert_eq!(
-            extract_base("https://judge.example.com/foo/bar").as_deref(),
-            Some("https://judge.example.com"),
-        );
-    }
-
-    #[test]
-    fn extract_base_invalid() {
-        assert_eq!(extract_base("not a url"), None);
-    }
-}

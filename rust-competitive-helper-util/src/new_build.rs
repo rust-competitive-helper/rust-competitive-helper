@@ -351,7 +351,7 @@ impl<FE: FileExplorer> Visitor<FE> {
         let mut code = String::new();
         let solution = self.content.remove("solution").unwrap();
         if let Some(task) = crate::parse_task(&self.file_explorer) {
-            code.push_str(&format!("// {}\n", task.url));
+            code.push_str(&format!("// {}\n", task.name));
         }
         code += unparse(solution.root.file.as_ref().unwrap()).as_str();
         if !solution.root.children.is_empty() {
