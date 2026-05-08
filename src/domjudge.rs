@@ -111,8 +111,8 @@ impl DomjudgeClient {
         let endpoint = format!("{}/api/v4/printing/team", self.base);
         let body = serde_json::json!({
             "language": language,
-            "fileContents": STANDARD.encode(source),
-            "originalName": filename,
+            "file_contents": STANDARD.encode(source),
+            "original_name": filename,
         });
         let resp = self
             .agent
