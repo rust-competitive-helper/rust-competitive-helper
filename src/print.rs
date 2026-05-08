@@ -1,10 +1,8 @@
 use crate::config::Config;
-use crate::domjudge::DomjudgeClient;
 use rust_competitive_helper_util::{read_lines, Task};
-use std::fs;
 use std::path::Path;
+use std::process::Command;
 
-const LANGUAGE: &str = "Rust";
 const MAIN_FILE: &str = "main/src/main.rs";
 
 pub fn print() {
@@ -13,35 +11,27 @@ pub fn print() {
         eprintln!("domjudge_server not set in config.toml");
         return;
     };
-    let name = match read_first_line_comment(MAIN_FILE) {
-        Some(n) => n,
-        None => {
-            eprintln!("Could not read problem name from {}", MAIN_FILE);
-            return;
-        }
-    };
-    let (task_name, source) = match find_task_source(&name) {
-        Some(p) => p,
-        None => {
-            eprintln!("No task in tasks/ matches problem name '{}'", name);
-            return;
-        }
-    };
-    let mut client = DomjudgeClient::new(server);
-    if let Err(e) = client.ensure_login() {
-        eprintln!("Login failed: {}", e);
+    let Some(name) = read_first_line_comment(MAIN_FILE) else {
+        eprintln!("Could not read problem name from {}", MAIN_FILE);
         return;
-    }
-    let filename = format!("{}.rs", task_name);
-    match client.print(&source, &filename, LANGUAGE) {
-        Ok(out) => {
-            println!("Print job submitted as {}", filename);
-            let trimmed = out.trim();
-            if !trimmed.is_empty() {
-                println!("{}", trimmed);
-            }
-        }
-        Err(e) => eprintln!("{}", e),
+    };
+    let Some(letter) = name.chars().find(|c| c.is_ascii_alphabetic()) else {
+        eprintln!("No letter in problem name: '{}'", name);
+        return;
+    };
+    let Some(task_name) = find_task_dir(&name) else {
+        eprintln!("No task in tasks/ matches '{}'", name);
+        return;
+    };
+    let url = format!(
+        "{}/{}",
+        server.trim_end_matches('/'),
+        letter.to_ascii_uppercase(),
+    );
+    let file = format!("tasks/{}/src/main.rs", task_name);
+    match Command::new("submitter").args(["print", &url, &file]).status() {
+        Ok(_) => {}
+        Err(e) => eprintln!("Failed to run submitter: {}", e),
     }
 }
 
@@ -50,12 +40,12 @@ fn read_first_line_comment(path: &str) -> Option<String> {
     Some(line.split_at(2).1.trim().to_string())
 }
 
-fn find_task_source(name: &str) -> Option<(String, String)> {
+fn find_task_dir(name: &str) -> Option<String> {
     let tasks_dir = Path::new("tasks");
     if !tasks_dir.is_dir() {
         return None;
     }
-    for entry in fs::read_dir(tasks_dir).ok()?.flatten() {
+    for entry in std::fs::read_dir(tasks_dir).ok()?.flatten() {
         if !entry.file_type().ok()?.is_dir() {
             continue;
         }
@@ -75,8 +65,7 @@ fn find_task_source(name: &str) -> Option<(String, String)> {
             Err(_) => continue,
         };
         if task.name == name {
-            let body = lines[1..].join("\n");
-            return Some((task_name, body));
+            return Some(task_name);
         }
     }
     None

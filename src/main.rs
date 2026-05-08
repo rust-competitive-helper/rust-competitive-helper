@@ -1,6 +1,5 @@
 mod archiver;
 mod config;
-mod domjudge;
 mod listener;
 mod menu;
 mod print;
