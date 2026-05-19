@@ -8,26 +8,25 @@ How to use it:
     ```
     cargo install --git https://github.com/rust-competitive-helper/rust-competitive-helper
     ```
-- Fork [example-contests-workspace](https://github.com/rust-competitive-helper/example-contests-workspace) repository on github, clone it locally, open in CLion
-- In CLion terminal run `rust-competitive-helper` from current directory
+- Fork [example-contests-workspace](https://github.com/rust-competitive-helper/example-contests-workspace) repository on github, clone it locally, open in RustRover
+- In the IDE terminal run `rust-competitive-helper` from the project root
 
 To use with [Competitive Companion](https://github.com/jmerle/competitive-companion):
 - Add 4244 to custom ports in plugin
-- Choose "Run listener" in `rust-competitive-helper`
+- Start `rust-competitive-helper` (the listener starts automatically)
 - Click "Parse task" in plugin
-- Project for this task will be created and opened in CLion.
+- A task crate will be created and the solution file opened in your IDE
 - Testing should be done by running main.rs in corresponding crate
-- Submit ./main/src/main.rs
+- To submit, pick "Submit" in the `rust-competitive-helper` menu — it dispatches to [submitter](https://github.com/EgorKulikov/submitter) for supported judges (Codeforces, AtCoder, kep.uz, etc.) or copies the assembled `main/src/main.rs` to the clipboard for unsupported sites
 
 # Config
-There is a config file, which is automatically created on the first run.
+`config.toml` is created in the project root on the first run. If an older
+global config exists (from previous versions), its contents are migrated
+once:
+- Linux:   `~/.config/rust-competitive-helper/default-config.toml`
+- Windows: `%APPDATA%\rust-competitive-helper\default-config.toml`
 
-Default locations:
-- Linux:   /home/alice/.config/rust-competitive-helper
-- Windows: C:\Users\Alice\AppData\Roaming\Foo Corp\rust-competitive-helper
-- macOS:   /Users/Alice/Library/Preferences/rust-competitive-helper
- 
-By default RustRover is used to open newly created task, but you can 
+By default RustRover is used to open newly created tasks, but you can
 override it to use vscode for example:
 ```
 open_task_command = [
