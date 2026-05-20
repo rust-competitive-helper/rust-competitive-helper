@@ -17,7 +17,7 @@ fn contest_name(group: &str) -> String {
     }
 }
 
-fn contest_list() -> Vec<(String, Vec<String>)> {
+pub fn contest_list() -> Vec<(String, Vec<String>)> {
     let mut result = BTreeMap::new();
     for task_name in read_dir("tasks").unwrap().map(|entry| {
         entry
@@ -64,7 +64,7 @@ fn find_additional_solution_files(task_name: &str) -> Vec<String> {
         .collect()
 }
 
-fn ask_archive(task_name: String, selection: usize) {
+pub fn ask_archive(task_name: String, selection: usize) {
     if selection == 0 {
         return;
     }
