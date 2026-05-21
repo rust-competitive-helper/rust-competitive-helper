@@ -6,7 +6,15 @@ use clipboard::{ClipboardContext, ClipboardProvider};
 use crossterm::execute;
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use regex::Regex;
-use rust_competitive_helper_util::{read_from_file, read_lines};
+use rust_competitive_helper_util::{load_task, read_from_file, read_lines};
+
+fn read_main_url() -> Option<String> {
+    if let Some(task) = load_task("main") {
+        return Some(task.url);
+    }
+    let first = read_lines("main/src/main.rs").ok()?.into_iter().next()?;
+    Some(first.strip_prefix("//")?.trim().to_string())
+}
 
 fn extract_site(url: &str) -> String {
     let url_regex = Regex::new(r"https?://(?:www\.)?([^/]+)").unwrap();
@@ -32,16 +40,7 @@ fn extract_site(url: &str) -> String {
 }
 
 pub fn submit() {
-    let file = "main/src/main.rs";
-    let url = read_lines(file)
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap()
-        .split_at(2)
-        .1
-        .trim()
-        .to_string();
+    let url = read_main_url().unwrap_or_default();
     let site = extract_site(&url);
     let quoted_url = if url
         .contains(|c: char| !c.is_ascii_alphanumeric() && !"-._~:/?[]@!$'+,;=%".contains(c))

@@ -3,11 +3,10 @@ use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 use itertools::Itertools;
-use rust_competitive_helper_util::Task;
+use rust_competitive_helper_util::{load_task, Task};
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::{read_dir, remove_dir_all, rename};
-use std::io::{BufRead, BufReader};
 use std::iter::once;
 
 fn contest_name(group: &str) -> String {
@@ -29,28 +28,11 @@ pub fn contest_list() -> Vec<(String, Vec<String>)> {
             .unwrap()
             .to_string()
     }) {
-        let main = fs::File::open(format!("tasks/{}/src/main.rs", task_name));
-        if main.is_err() {
+        let Some(task) = load_task(format!("tasks/{}", task_name)) else {
             continue;
-        }
-        let main = main.unwrap();
-        let mut content = BufReader::new(main).lines();
-        let first_line = content.next();
-        if first_line.is_none() {
-            continue;
-        }
-        let first_line = first_line.unwrap().unwrap();
-        if !first_line.starts_with("//") {
-            continue;
-        }
-        let json = first_line.chars().skip(2).collect::<String>();
-        if let Ok(task) = serde_json::from_str::<Task>(json.as_str()) {
-            let contest_name = contest_name(&task.group);
-            if !result.contains_key(&contest_name) {
-                result.insert(contest_name.clone(), Vec::new());
-            }
-            result.get_mut(&contest_name).unwrap().push(task_name);
-        }
+        };
+        let contest_name = contest_name(&task.group);
+        result.entry(contest_name).or_insert_with(Vec::new).push(task_name);
     }
     result.into_iter().collect()
 }
@@ -73,9 +55,8 @@ pub fn ask_archive(task_name: String, selection: usize) {
         let mut main =
             rust_competitive_helper_util::read_lines(format!("tasks/{}/src/main.rs", task_name))
                 .unwrap();
-        let task =
-            serde_json::from_str::<Task>(main[0].chars().skip(2).collect::<String>().as_str())
-                .unwrap();
+        let task: Task = load_task(format!("tasks/{}", task_name))
+            .expect("task config missing");
         let path = format!(
             "archive/{}/{:02}/{}.{:02}.{:02} - {}",
             now.year(),

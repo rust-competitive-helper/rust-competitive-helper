@@ -153,7 +153,10 @@ pub fn create(task: Task) {
     }
     let mut main = read_from_file("templates/main.rs").expect("templates/main.rs not found");
     main = main.replace("$SOLVE", solve.as_str());
-    main = main.replace("$JSON", serde_json::to_string(&task).unwrap().as_str());
+    // Task config now lives in tasks/<name>/task.json (written below).
+    // Strip the legacy `//$JSON` template line entirely; leave any other $JSON
+    // sites empty for safety.
+    main = main.replace("//$JSON\n", "").replace("$JSON", "");
     main = main.replace("$IO_SETTINGS", get_io_settings(&task).as_str());
     let (row, col): (i32, i32) = match main.find("$CARET") {
         None => (1, 1),
@@ -223,6 +226,10 @@ pub fn create(task: Task) {
         }
     }
     write_to_file(format!("tasks/{}/src/main.rs", name), main);
+    write_to_file(
+        format!("tasks/{}/task.json", name),
+        serde_json::to_string_pretty(&task).unwrap(),
+    );
     if Path::new("templates/tester.rs").exists() {
         let mut tester =
             read_from_file("templates/tester.rs").expect("templates/tester.rs not found");

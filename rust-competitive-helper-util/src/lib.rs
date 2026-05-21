@@ -128,16 +128,34 @@ pub fn write_lines<P: AsRef<Path>, C: Into<String>>(filename: P, lines: Vec<C>) 
 }
 
 pub(crate) fn parse_task<F: FileExplorer>(file_explorer: &F) -> Option<Task> {
-    // Task json should be written in the first line of the main.rs
+    // Prefer the dedicated task.json file.
+    if let Ok(lines) = file_explorer.read_file("task.json") {
+        if let Ok(task) = serde_json::from_str::<Task>(&lines.join("\n")) {
+            return Some(task);
+        }
+    }
+    // Fall back to the legacy `//<json>` first-line embedded in main.rs.
     let first_line = file_explorer
         .read_file("src/main.rs")
-        .unwrap()
+        .ok()?
         .into_iter()
         .find(|s| !s.trim().is_empty())?;
     let first_line = first_line.trim();
-    if !first_line.starts_with("//") {
-        return None;
+    let stripped = first_line.strip_prefix("//")?;
+    serde_json::from_str::<Task>(stripped).ok()
+}
+
+/// Load the task config for a task directory, trying `<dir>/task.json` first
+/// and falling back to parsing the first `//<json>` line in `<dir>/src/main.rs`.
+pub fn load_task<P: AsRef<Path>>(dir: P) -> Option<Task> {
+    let dir = dir.as_ref();
+    if let Ok(content) = fs::read_to_string(dir.join("task.json")) {
+        if let Ok(task) = serde_json::from_str::<Task>(&content) {
+            return Some(task);
+        }
     }
-    let first_line = &first_line[2..];
-    serde_json::from_str::<Task>(first_line).ok()
+    let main = fs::read_to_string(dir.join("src/main.rs")).ok()?;
+    let first = main.lines().find(|l| !l.trim().is_empty())?;
+    let stripped = first.trim().strip_prefix("//")?;
+    serde_json::from_str::<Task>(stripped.trim()).ok()
 }
