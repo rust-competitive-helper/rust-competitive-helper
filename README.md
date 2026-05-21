@@ -15,9 +15,24 @@ To use with [Competitive Companion](https://github.com/jmerle/competitive-compan
 - Add 4244 to custom ports in plugin
 - Start `rust-competitive-helper` (the listener starts automatically)
 - Click "Parse task" in plugin
-- A task crate will be created and the solution file opened in your IDE
+- A task crate will be created (with `tasks/<name>/task.json` holding the
+  parsed task metadata) and the solution file opened in your IDE
 - Testing should be done by running main.rs in corresponding crate
 - To submit, pick "Submit" in the `rust-competitive-helper` menu — it dispatches to [submitter](https://github.com/EgorKulikov/submitter) for supported judges (Codeforces, AtCoder, kep.uz, etc.) or copies the assembled `main/src/main.rs` to the clipboard for unsupported sites
+
+# CLI subcommands
+Every menu action can also be invoked non-interactively from the project root:
+```
+rust-competitive-helper                       # launch the menu (default)
+rust-competitive-helper submit                # submit main/src/main.rs
+rust-competitive-helper new <name> [flags]    # create a task without prompts
+rust-competitive-helper archive <contest>     # archive a whole contest
+rust-competitive-helper archive --task NAME   # archive a single task
+rust-competitive-helper help                  # show usage with all flags
+```
+Run `rust-competitive-helper help` for the full list of `new`/`archive` flags
+(`--tests`, `--test-type`, `--input-file`, `--output-file`, `--interactive`,
+`--time-limit`, `--group`, `--action`).
 
 # Config
 `config.toml` is created in the project root on the first run. If an older
@@ -39,9 +54,9 @@ open_task_command = [
 
 # Other stuff
 
-To make git not track changes in auto-generated main.rs file:
+To make git not track changes in the auto-generated files:
 ```
-git update-index --assume-unchanged main/src/main.rs
+git update-index --assume-unchanged main/src/main.rs main/task.json
 ```
 
 If you want to use your version of rust-contest-helper, you can run it like this:
