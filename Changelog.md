@@ -12,6 +12,9 @@ it from the template too.
 `... archive <contest>` (or `--task NAME`), and `... help`. Running
 with no arguments still launches the interactive menu.
 
+**2026-05-21** repovive.com submissions are now routed through
+[submitter](https://github.com/EgorKulikov/submitter).
+
 **2026-05-19** kep.uz submissions are now routed through
 [submitter](https://github.com/EgorKulikov/submitter).
 

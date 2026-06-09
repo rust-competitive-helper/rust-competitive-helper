@@ -51,7 +51,7 @@ pub fn submit() {
     };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
-        | "atcoder" | "luogu" | "kep" => submitter::submit(&quoted_url),
+        | "atcoder" | "luogu" | "kep" | "repovive" => submitter::submit(&quoted_url),
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
         _ => false,
@@ -101,6 +101,10 @@ mod tests {
         assert_eq!(
             extract_site("https://kep.uz/contests/487/problem/A"),
             "kep"
+        );
+        assert_eq!(
+            extract_site("https://repovive.com/problem/123"),
+            "repovive"
         );
     }
 
