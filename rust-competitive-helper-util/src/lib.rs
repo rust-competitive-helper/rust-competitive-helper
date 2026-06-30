@@ -79,6 +79,10 @@ pub struct Task {
     pub test_type: TestType,
     pub input: IOType,
     pub output: IOType,
+    /// Task creation date, `YYYY-MM-DD`. Populated when the task is created;
+    /// older tasks may not have it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
 }
 
 pub fn read_from_file<P: AsRef<Path>>(filename: P) -> Option<String> {

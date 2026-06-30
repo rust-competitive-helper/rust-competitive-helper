@@ -109,6 +109,7 @@ fn build_task(a: NewArgs) -> Task {
         test_type: a.test_type,
         input: a.input,
         output: a.output,
+        date: None,
     }
 }
 

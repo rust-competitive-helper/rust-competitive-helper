@@ -1,3 +1,10 @@
+**2026-06-30** `task.json` now records the creation date in a `date` field
+(`YYYY-MM-DD`). Archival uses that date when laying out
+`archive/<year>/<month>/<year>.<month>.<day> - <contest>/` instead of the
+current wall-clock date, so a contest archived a week later still files
+under the day it was solved. Existing tasks without `date` fall back to
+the archival date.
+
 **2026-05-21** Task metadata moved out of `main.rs` into a sibling
 `tasks/<name>/task.json`, and the assembled build now produces
 `main/task.json` instead of writing `// <url>` on the first line of

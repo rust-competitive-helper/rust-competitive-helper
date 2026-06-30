@@ -1,4 +1,5 @@
 use crate::config::Config;
+use chrono::Utc;
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
@@ -119,9 +120,12 @@ fn generate_new_cargo_toml_content(config: &Config, task_name: &str) -> Option<V
     Some(lines)
 }
 
-pub fn create(task: Task) {
+pub fn create(mut task: Task) {
     let config = Config::load();
     let name = task_name(&task);
+    if task.date.is_none() {
+        task.date = Some(Utc::now().format("%Y-%m-%d").to_string());
+    }
 
     let new_cargo_toml_content = match generate_new_cargo_toml_content(&config, &name) {
         Some(content) => content,
@@ -371,6 +375,7 @@ pub fn create_task_wizard() {
         test_type: select_test_type(),
         input: select_input_type(),
         output: select_output_type(),
+        date: None,
     };
     create(task);
 }
@@ -399,6 +404,7 @@ mod tests {
                 file_name: None,
                 pattern: None,
             },
+            date: None,
         }
     }
 

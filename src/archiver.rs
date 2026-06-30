@@ -1,4 +1,4 @@
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use dialoguer::console::Term;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
@@ -51,19 +51,27 @@ pub fn ask_archive(task_name: String, selection: usize) {
         return;
     }
     if selection >= 2 {
-        let now = Utc::now();
         let mut main =
             rust_competitive_helper_util::read_lines(format!("tasks/{}/src/main.rs", task_name))
                 .unwrap();
         let task: Task = load_task(format!("tasks/{}", task_name))
             .expect("task config missing");
+        let (year, month, day) = task
+            .date
+            .as_deref()
+            .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+            .map(|d| (d.year(), d.month(), d.day()))
+            .unwrap_or_else(|| {
+                let now = Utc::now();
+                (now.year(), now.month(), now.day())
+            });
         let path = format!(
             "archive/{}/{:02}/{}.{:02}.{:02} - {}",
-            now.year(),
-            now.month(),
-            now.year(),
-            now.month(),
-            now.day(),
+            year,
+            month,
+            year,
+            month,
+            day,
             contest_name(&task.group),
         );
         let path = path.replace(':', "_");
