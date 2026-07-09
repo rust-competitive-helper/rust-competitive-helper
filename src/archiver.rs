@@ -12,7 +12,16 @@ use std::iter::once;
 fn contest_name(group: &str) -> String {
     match group.find('-') {
         None => group.to_string(),
-        Some(at) => group.split_at(at + 1).1.trim().to_string(),
+        Some(at) => {
+            let (before, after) = group.split_at(at);
+            let before = before.trim();
+            let after = after[1..].trim();
+            if !before.is_empty() && after.contains(before) {
+                after.to_string()
+            } else {
+                group.to_string()
+            }
+        }
     }
 }
 

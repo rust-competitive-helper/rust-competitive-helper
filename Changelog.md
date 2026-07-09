@@ -1,3 +1,9 @@
+**2026-07-09** Archive contest names no longer strip the `<site> -` prefix
+unless the site name is repeated in the contest title. So
+`Codeforces - Round 900` stays as-is, while
+`Codeforces - Codeforces Round 900` collapses to
+`Codeforces Round 900`.
+
 **2026-06-30** `task.json` now records the creation date in a `date` field
 (`YYYY-MM-DD`). Archival uses that date when laying out
 `archive/<year>/<month>/<year>.<month>.<day> - <contest>/` instead of the
