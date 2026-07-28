@@ -1,5 +1,7 @@
 pub mod build;
+mod dce;
 mod file_explorer;
+mod minimize;
 mod new_build;
 mod old_build;
 mod tests;

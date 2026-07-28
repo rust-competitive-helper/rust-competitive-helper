@@ -369,6 +369,15 @@ impl<FE: FileExplorer> Visitor<FE> {
             Self::add_code(&mut library_code, &library.root);
         }
         if self.minimize {
+            // DCE uses the solution + main source to seed reachability.
+            match crate::dce::eliminate(&library_code, &code) {
+                Ok(pruned) => library_code = pruned,
+                Err(e) => eprintln!("Skipping DCE: {}", e),
+            }
+            match crate::minimize::rename(&library_code) {
+                Ok(renamed) => library_code = renamed,
+                Err(e) => eprintln!("Skipping identifier renaming: {}", e),
+            }
             let file = syn_old::parse_file(&library_code).unwrap();
             library_code = rustminify::minify_file(&file).to_string();
         }
