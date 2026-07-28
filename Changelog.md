@@ -1,3 +1,6 @@
+**2026-07-29** judge.yosupo.jp submissions are now routed through
+[submitter](https://github.com/EgorKulikov/submitter).
+
 **2026-07-09** Archive contest names no longer strip the `<site> -` prefix
 unless the site name is repeated in the contest title. So
 `Codeforces - Round 900` stays as-is, while
