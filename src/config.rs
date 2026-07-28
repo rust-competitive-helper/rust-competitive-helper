@@ -15,14 +15,18 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        // JetBrains 2026.2 launchers reject leading options and only see them
+        // after the file path — see IJPL-249895. Order args as
+        // `<launcher> $FILE --line ... --column ...` so we work on both the
+        // buggy 2026.2 launcher and older versions.
         let open_task_command = if cfg!(windows) {
             [
                 "rustrover.cmd",
+                "$FILE",
                 "--line",
                 "$LINE",
                 "--column",
                 "$COLUMN",
-                "$FILE",
             ]
             .map(|s| s.to_owned())
             .to_vec()
@@ -30,11 +34,11 @@ impl Default for Config {
             let clion_path = std::env::var("HOME").unwrap() + "/.local/bin/rustrover";
             [
                 &clion_path,
+                "$FILE",
                 "--line",
                 "$LINE",
                 "--column",
                 "$COLUMN",
-                "$FILE",
             ]
             .map(|s| s.to_owned())
             .to_vec()
