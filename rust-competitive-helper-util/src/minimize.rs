@@ -347,10 +347,20 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
                     match impl_item {
                         ImplItem::Fn(f) => {
                             let name = f.sig.ident.to_string();
+                            // Only associated fns (no `self` receiver)
+                            // are safe to rename: their call sites are
+                            // always `Type::name(...)` / `Self::name(...)`
+                            // path syntax, which we can rewrite via
+                            // visit_path_mut. Methods with `&self` /
+                            // `&mut self` / `self` are called as
+                            // `x.name()` and we can't tell whether the
+                            // receiver's type is ours or std without
+                            // type inference, so we leave them alone.
                             if !is_trait_impl
                                 && is_private(&f.vis)
                                 && is_renamable_attrs(&f.attrs)
                                 && name != "main"
+                                && !has_self_receiver(f)
                             {
                                 self.candidates.push((name, ItemKind::Method));
                             } else {
@@ -498,6 +508,10 @@ fn is_renamable_attrs(attrs: &[syn::Attribute]) -> bool {
     true
 }
 
+fn has_self_receiver(f: &ImplItemFn) -> bool {
+    matches!(f.sig.inputs.first(), Some(FnArg::Receiver(_)))
+}
+
 struct ItemRenamer<'a> {
     map: &'a HashMap<String, String>,
     /// Stack of generic-param names in scope. Rewriting an ident is
@@ -612,22 +626,17 @@ impl VisitMut for ItemRenamer<'_> {
     }
 
     fn visit_impl_item_fn_mut(&mut self, node: &mut ImplItemFn) {
-        // Only rename the method DEF if we're in an inherent impl.
-        // Trait impls must keep names matching the trait contract.
+        // Only rename the method DEF if we're in an inherent impl AND
+        // it's an associated fn (no `self` receiver). Methods with
+        // self are non_renamable (see ItemNameCollector), so no map
+        // entry exists for them and `rename_ident` is a no-op — but
+        // check explicitly for clarity.
         if !self.in_trait_impl {
             self.rename_ident(&mut node.sig.ident);
         }
         self.enter_generics(&node.sig.generics);
         visit_mut::visit_impl_item_fn_mut(self, node);
         self.exit_generics();
-    }
-
-    fn visit_expr_method_call_mut(&mut self, node: &mut syn::ExprMethodCall) {
-        // Method-call sites `x.foo()` — always safe to rewrite,
-        // since our rename map only contains method names that
-        // passed the ambiguity + field-collision safety filters.
-        self.rename_ident(&mut node.method);
-        visit_mut::visit_expr_method_call_mut(self, node);
     }
 
     fn visit_impl_item_type_mut(&mut self, node: &mut syn::ImplItemType) {
@@ -681,9 +690,11 @@ impl VisitMut for ItemRenamer<'_> {
             map.get(name).cloned()
         };
         let tokens = std::mem::take(&mut node.tokens);
-        // Item rename also rewrites `.method` and `::foo` inside macros
-        // so private inherent-method renames land there too.
-        node.tokens = rewrite_macro_tokens(tokens, &lookup, false, false);
+        // Item rename rewrites path segments inside macros (`Type::foo`,
+        // `mod::foo`) but leaves `.foo` alone: without type inference
+        // we can't tell whether `x.foo()` on some receiver refers to
+        // our type's method or a std method with the same name.
+        node.tokens = rewrite_macro_tokens(tokens, &lookup, true, false);
     }
 }
 
@@ -1429,7 +1440,10 @@ mod tests {
     }
 
     #[test]
-    fn renames_private_inherent_method() {
+    fn renames_private_associated_fn() {
+        // Associated fns (no `self` receiver) are safe: they're only
+        // ever called via `Type::foo()` / `Self::foo()` path syntax,
+        // which visit_path_mut rewrites unambiguously.
         let out = rename(
             r#"
             pub mod algo_lib {
@@ -1437,17 +1451,65 @@ mod tests {
                 impl BitSet {
                     pub fn new() -> Self { let x = Self::index(0); Self { data: vec![0; x] } }
                     fn index(a: usize) -> usize { a >> 6 }
-                    fn fix_last(&mut self) { self.data.fill(0); }
                 }
             }
         "#,
         )
         .unwrap();
         assert!(!out.contains("index"), "output:\n{}", out);
-        assert!(!out.contains("fix_last"), "output:\n{}", out);
         // Public method `new` and the struct field `data` survive.
         assert!(out.contains("fn new"), "output:\n{}", out);
         assert!(out.contains("data"), "output:\n{}", out);
+        syn::parse_file(&out).unwrap();
+    }
+
+    #[test]
+    fn keeps_methods_with_self_receiver() {
+        // Methods with `&self` / `&mut self` / `self` receivers are
+        // NOT renamed — `.method()` call sites can't be resolved
+        // to a specific type without inference, so renaming would
+        // risk clobbering std method calls of the same name.
+        let out = rename(
+            r#"
+            pub mod algo_lib {
+                pub struct BitSet { data: Vec<u64> }
+                impl BitSet {
+                    pub fn new() -> Self { Self { data: vec![] } }
+                    fn fix_last(&mut self) { self.data.fill(0); }
+                }
+                pub fn touch(b: &mut BitSet) { b.fix_last(); }
+            }
+        "#,
+        )
+        .unwrap();
+        assert!(out.contains("fix_last"), "output:\n{}", out);
+        syn::parse_file(&out).unwrap();
+    }
+
+    #[test]
+    fn does_not_clobber_std_method_named_like_private_assoc_fn() {
+        // Regression: `Vec::rotate_left` is a std method. If we ever
+        // renamed `.rotate_left()` on any receiver based on a library
+        // rename, this would break. With the `has_self_receiver`
+        // guard + skip-after-dot in the macro rewriter, `Vec` calls
+        // stay intact.
+        let out = rename(
+            r#"
+            pub mod algo_lib {
+                pub struct Node;
+                impl Node {
+                    fn rotate_left(root: Self) -> Self { root }
+                }
+                pub fn shift(v: &mut Vec<u64>, n: usize) { v.rotate_left(n); }
+            }
+        "#,
+        )
+        .unwrap();
+        // Path-form call site to the private fn IS rewritten via
+        // visit_path_mut (last segment).
+        assert!(!out.contains("Node::rotate_left"), "output:\n{}", out);
+        // .rotate_left on a Vec receiver must survive.
+        assert!(out.contains("rotate_left"), "output:\n{}", out);
         syn::parse_file(&out).unwrap();
     }
 
