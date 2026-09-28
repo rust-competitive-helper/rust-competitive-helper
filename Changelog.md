@@ -1,3 +1,12 @@
+**2026-09-28** The aggregated `main/src/main.rs` now preserves the
+solution's `//` comments and macro-invocation formatting; the library
+sections also preserve them when the task's `build.rs` uses
+`build_new(false)`. Previously prettyplease dropped comments and
+re-serialized macro token streams onto one line even when no
+minification was requested. `build_new(true)` still minifies the
+library into the one-liner form as before, and the solution stays
+readable in both modes.
+
 **2026-07-29** judge.yosupo.jp submissions are now routed through
 [submitter](https://github.com/EgorKulikov/submitter).
 
