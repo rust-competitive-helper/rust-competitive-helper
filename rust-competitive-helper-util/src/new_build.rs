@@ -591,12 +591,17 @@ impl<FE: FileExplorer> Visitor<FE> {
                 }
                 false
             } else {
+                // Root macro imports are deleted by the caller, so don't also
+                // schedule a rewrite inside the span that will be removed.
+                if self.in_root {
+                    return true;
+                }
                 // Macro `use`: no library segment inserted, just the
                 // leading rename to `crate` (no-op if it already was).
                 if orig_first_ident != "crate" {
                     self.record_replace_span(orig_first_span, "crate".to_string());
                 }
-                self.in_root
+                false
             }
         } else {
             false
@@ -751,3 +756,7 @@ fn render_module_file(module: &Module, readable: bool) -> String {
     }
     unparse(file)
 }
+
+#[cfg(test)]
+#[path = "tests/new_build.rs"]
+mod tests;
