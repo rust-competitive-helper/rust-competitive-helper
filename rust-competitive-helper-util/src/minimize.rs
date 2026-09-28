@@ -68,6 +68,7 @@ pub fn rename(code: &str) -> Result<String, syn::Error> {
     if !item_map.is_empty() {
         ItemRenamer {
             map: &item_map,
+            our_types: &items.our_types,
             mask_stack: Vec::new(),
             in_trait_impl: false,
         }
@@ -126,6 +127,19 @@ fn rewrite_macro_tokens(
     skip_after_dot: bool,
     skip_after_colon_colon: bool,
 ) -> TokenStream {
+    let wrapped = |name: &str, _prev: Option<&str>| lookup(name);
+    rewrite_macro_tokens_with_prev(stream, &wrapped, skip_after_dot, skip_after_colon_colon)
+}
+
+/// Same as `rewrite_macro_tokens`, but the lookup is also handed the
+/// original ident immediately preceding a `::` — needed so the caller
+/// can guard method-name substitution on the owning type.
+fn rewrite_macro_tokens_with_prev(
+    stream: TokenStream,
+    lookup: &dyn Fn(&str, Option<&str>) -> Option<String>,
+    skip_after_dot: bool,
+    skip_after_colon_colon: bool,
+) -> TokenStream {
     let tts: Vec<TokenTree> = stream.into_iter().collect();
     let mut out: Vec<TokenTree> = Vec::with_capacity(tts.len());
     for tt in tts {
@@ -135,7 +149,8 @@ fn rewrite_macro_tokens(
                     TokenTree::Ident(id)
                 } else {
                     let name = id.to_string();
-                    if let Some(new_name) = lookup(&name) {
+                    let prev = prev_path_ident(&out);
+                    if let Some(new_name) = lookup(&name, prev.as_deref()) {
                         TokenTree::Ident(proc_macro2::Ident::new(&new_name, id.span()))
                     } else {
                         TokenTree::Ident(id)
@@ -143,18 +158,49 @@ fn rewrite_macro_tokens(
                 }
             }
             TokenTree::Group(g) => {
-                let inner =
-                    rewrite_macro_tokens(g.stream(), lookup, skip_after_dot, skip_after_colon_colon);
+                let inner = rewrite_macro_tokens_with_prev(
+                    g.stream(),
+                    lookup,
+                    skip_after_dot,
+                    skip_after_colon_colon,
+                );
                 let mut ng = proc_macro2::Group::new(g.delimiter(), inner);
                 ng.set_span(g.span());
                 TokenTree::Group(ng)
             }
-            TokenTree::Literal(lit) => rewrite_str_literal(lit, lookup),
+            TokenTree::Literal(lit) => {
+                // Format-capture rewriting has no path context; hand
+                // the inner lookup `None` for the previous ident.
+                let inner = |name: &str| lookup(name, None);
+                rewrite_str_literal(lit, &inner)
+            }
             TokenTree::Punct(p) => TokenTree::Punct(p),
         };
         out.push(new);
     }
     out.into_iter().collect()
+}
+
+/// If the tokens immediately before the current position look like
+/// `IDENT ::`, return that ident's text. Used for the method-rename
+/// guard inside macros.
+fn prev_path_ident(out: &[TokenTree]) -> Option<String> {
+    let n = out.len();
+    if n < 3 {
+        return None;
+    }
+    match &out[n - 1] {
+        TokenTree::Punct(p) if p.as_char() == ':' => {}
+        _ => return None,
+    }
+    match &out[n - 2] {
+        TokenTree::Punct(p) if p.as_char() == ':' && p.spacing() == Spacing::Joint => {}
+        _ => return None,
+    }
+    match &out[n - 3] {
+        TokenTree::Ident(id) => Some(id.to_string()),
+        _ => None,
+    }
 }
 
 fn is_field_or_path_tail(
@@ -167,6 +213,11 @@ fn is_field_or_path_tail(
         _ => return false,
     };
     if skip_after_dot && last.as_char() == '.' {
+        if let Some(TokenTree::Punct(p2)) = out.get(out.len().saturating_sub(2)) {
+            if p2.as_char() == '.' && p2.spacing() == Spacing::Joint {
+                return false;
+            }
+        }
         return true;
     }
     if skip_after_colon_colon && last.as_char() == ':' {
@@ -279,6 +330,13 @@ struct ItemNameCollector {
     /// Candidates for renaming, tagged with their kind so we can
     /// detect same-name/different-kind ambiguity.
     candidates: Vec<(String, ItemKind)>,
+    /// Type-like names declared in the library (struct / enum / union /
+    /// type alias / trait), pub and private alike. Used at rewrite time
+    /// to guard method-name substitution: `Foo::bar` — where `bar` is a
+    /// renamed private method — is only rewritten when `Foo` is a type
+    /// we own. Without this, `Vec::new` gets clobbered by an unrelated
+    /// `Input::new` rename.
+    our_types: HashSet<String>,
 }
 
 impl<'ast> Visit<'ast> for ItemNameCollector {
@@ -286,6 +344,7 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
         match node {
             Item::Fn(f) => self.consider(&f.sig.ident, &f.vis, ItemKind::Fn, is_renamable_fn(f)),
             Item::Struct(s) => {
+                self.our_types.insert(s.ident.to_string());
                 self.consider(&s.ident, &s.vis, ItemKind::Struct, is_renamable_attrs(&s.attrs));
                 for field in s.fields.iter() {
                     if let Some(id) = &field.ident {
@@ -294,6 +353,7 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
                 }
             }
             Item::Enum(e) => {
+                self.our_types.insert(e.ident.to_string());
                 self.consider(&e.ident, &e.vis, ItemKind::Enum, is_renamable_attrs(&e.attrs));
                 for v in &e.variants {
                     self.record(&v.ident);
@@ -305,6 +365,7 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
                 }
             }
             Item::Union(u) => {
+                self.our_types.insert(u.ident.to_string());
                 self.consider(&u.ident, &u.vis, ItemKind::Union, is_renamable_attrs(&u.attrs));
                 for field in u.fields.named.iter() {
                     if let Some(id) = &field.ident {
@@ -312,12 +373,15 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
                     }
                 }
             }
-            Item::Type(t) => self.consider(
-                &t.ident,
-                &t.vis,
-                ItemKind::TypeAlias,
-                is_renamable_attrs(&t.attrs),
-            ),
+            Item::Type(t) => {
+                self.our_types.insert(t.ident.to_string());
+                self.consider(
+                    &t.ident,
+                    &t.vis,
+                    ItemKind::TypeAlias,
+                    is_renamable_attrs(&t.attrs),
+                );
+            }
             Item::Const(c) => self.consider(
                 &c.ident,
                 &c.vis,
@@ -330,8 +394,14 @@ impl<'ast> Visit<'ast> for ItemNameCollector {
                 ItemKind::Static,
                 is_renamable_attrs(&s.attrs),
             ),
-            Item::Trait(t) => self.record(&t.ident),
-            Item::TraitAlias(t) => self.record(&t.ident),
+            Item::Trait(t) => {
+                self.our_types.insert(t.ident.to_string());
+                self.record(&t.ident);
+            }
+            Item::TraitAlias(t) => {
+                self.our_types.insert(t.ident.to_string());
+                self.record(&t.ident);
+            }
             Item::Mod(m) => self.record(&m.ident),
             Item::Macro(m) => {
                 if let Some(id) = &m.ident {
@@ -430,7 +500,7 @@ impl ItemNameCollector {
         }
     }
 
-    fn build_rename_map(&self, avoid: &HashSet<String>) -> HashMap<String, String> {
+    fn build_rename_map(&self, avoid: &HashSet<String>) -> HashMap<String, (String, ItemKind)> {
         // Group candidates by name — if a name shows up under two
         // different kinds (e.g. an inherent fn `foo` and a nested
         // struct `foo`), we can't safely rewrite paths ambiguously,
@@ -440,10 +510,10 @@ impl ItemNameCollector {
             kinds_by_name.entry(name.as_str()).or_default().insert(*kind);
         }
 
-        let mut map: HashMap<String, String> = HashMap::new();
+        let mut map: HashMap<String, (String, ItemKind)> = HashMap::new();
         let mut counter: u64 = 0;
         let mut used: HashSet<String> = avoid.clone();
-        for (name, _kind) in &self.candidates {
+        for (name, kind) in &self.candidates {
             if map.contains_key(name) {
                 continue;
             }
@@ -461,7 +531,7 @@ impl ItemNameCollector {
                 }
             };
             used.insert(new.clone());
-            map.insert(name.clone(), new);
+            map.insert(name.clone(), (new, *kind));
         }
         map
     }
@@ -513,7 +583,10 @@ fn has_self_receiver(f: &ImplItemFn) -> bool {
 }
 
 struct ItemRenamer<'a> {
-    map: &'a HashMap<String, String>,
+    map: &'a HashMap<String, (String, ItemKind)>,
+    /// Type-like names declared in the library. Used to guard method
+    /// rewrites at path use sites — see `rename_path_segment`.
+    our_types: &'a HashSet<String>,
     /// Stack of generic-param names in scope. Rewriting an ident is
     /// suppressed when it matches any masked name, so a generic
     /// parameter like `F` in `fn build<F: ...>(f: F)` doesn't get
@@ -530,14 +603,40 @@ impl ItemRenamer<'_> {
         self.mask_stack.iter().any(|s| s.contains(name))
     }
 
+    /// Unconditional rewrite. Use only at DEFINITION sites (fn/struct/…
+    /// name being declared) or path segments that name a non-Method
+    /// item — never for path segments referring to associated fns,
+    /// which need the `rename_path_segment` guard.
     fn rename_ident(&self, id: &mut Ident) {
         let name = id.to_string();
         if self.is_masked(&name) {
             return;
         }
-        if let Some(new) = self.map.get(&name) {
+        if let Some((new, _kind)) = self.map.get(&name) {
             *id = Ident::new(new, id.span());
         }
+    }
+
+    /// Rewrite one segment of a `Path`, given the original name of the
+    /// segment immediately preceding it (if any). For method-kind
+    /// renames, we only rewrite when the previous segment is `Self`
+    /// or names a type we own — that stops `Vec::new` from being
+    /// clobbered when some `Input::new` in our library was renamed.
+    fn rename_path_segment(&self, id: &mut Ident, prev: Option<&str>) {
+        let name = id.to_string();
+        if self.is_masked(&name) {
+            return;
+        }
+        let Some((new, kind)) = self.map.get(&name) else {
+            return;
+        };
+        if *kind == ItemKind::Method {
+            let owned = matches!(prev, Some(p) if p == "Self" || self.our_types.contains(p));
+            if !owned {
+                return;
+            }
+        }
+        *id = Ident::new(new, id.span());
     }
 
     fn enter_generics(&mut self, generics: &syn::Generics) {
@@ -658,11 +757,14 @@ impl VisitMut for ItemRenamer<'_> {
     }
 
     fn visit_path_mut(&mut self, node: &mut Path) {
-        // Rewrite ANY segment matching a private item — types show up
-        // in the middle of paths (`MyType::method`, `MyEnum::Variant`),
-        // not only at the end.
-        for seg in node.segments.iter_mut() {
-            self.rename_ident(&mut seg.ident);
+        // Rewrite each segment, but hand `rename_path_segment` the
+        // ORIGINAL name of the preceding segment (so the method guard
+        // sees `Vec` even after we've already rewritten segment 0).
+        let originals: Vec<String> =
+            node.segments.iter().map(|s| s.ident.to_string()).collect();
+        for (i, seg) in node.segments.iter_mut().enumerate() {
+            let prev = if i > 0 { Some(originals[i - 1].as_str()) } else { None };
+            self.rename_path_segment(&mut seg.ident, prev);
         }
         visit_mut::visit_path_mut(self, node);
     }
@@ -680,21 +782,31 @@ impl VisitMut for ItemRenamer<'_> {
         // Rewrite item-name refs inside macro token streams. Don't
         // skip after `::` — `mod::foo` / `Type::method` are valid.
         // Respect the generic-param mask so `dbg!(F)` inside a fn
-        // with `<F>` doesn't get rewritten.
+        // with `<F>` doesn't get rewritten. For method-kind renames
+        // apply the same guard as `visit_path_mut`: only rewrite when
+        // the preceding path segment is `Self` or a type we own.
         let map = self.map;
         let mask_stack = &self.mask_stack;
-        let lookup = |name: &str| {
+        let our_types = self.our_types;
+        let lookup = |name: &str, prev_ident: Option<&str>| {
             if mask_stack.iter().any(|s| s.contains(name)) {
                 return None;
             }
-            map.get(name).cloned()
+            let (new, kind) = map.get(name)?;
+            if *kind == ItemKind::Method {
+                let owned = matches!(prev_ident, Some(p) if p == "Self" || our_types.contains(p));
+                if !owned {
+                    return None;
+                }
+            }
+            Some(new.clone())
         };
         let tokens = std::mem::take(&mut node.tokens);
         // Item rename rewrites path segments inside macros (`Type::foo`,
         // `mod::foo`) but leaves `.foo` alone: without type inference
         // we can't tell whether `x.foo()` on some receiver refers to
         // our type's method or a std method with the same name.
-        node.tokens = rewrite_macro_tokens(tokens, &lookup, true, false);
+        node.tokens = rewrite_macro_tokens_with_prev(tokens, &lookup, true, false);
     }
 }
 
