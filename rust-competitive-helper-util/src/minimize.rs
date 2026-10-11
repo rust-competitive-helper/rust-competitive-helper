@@ -526,9 +526,10 @@ impl ItemNameCollector {
             let new = loop {
                 counter += 1;
                 let candidate = short_name(counter, FIRST_UPPER, REST_ALPHABET);
-                if !used.contains(&candidate) {
-                    break candidate;
+                if is_reserved_ident(&candidate) || used.contains(&candidate) {
+                    continue;
                 }
+                break candidate;
             };
             used.insert(new.clone());
             map.insert(name.clone(), (new, *kind));
@@ -851,7 +852,10 @@ impl LocalRenamer {
         loop {
             self.fn_local_counter += 1;
             let candidate = short_name(self.fn_local_counter, FIRST_LOWER, REST_ALPHABET);
-            if self.fn_forbidden.contains(&candidate) || self.fn_used_new.contains(&candidate) {
+            if is_reserved_ident(&candidate)
+                || self.fn_forbidden.contains(&candidate)
+                || self.fn_used_new.contains(&candidate)
+            {
                 continue;
             }
             self.fn_used_new.insert(candidate.clone());
@@ -1127,6 +1131,29 @@ const FIRST_LOWER: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
 const FIRST_UPPER: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const REST_ALPHABET: &[u8] =
     b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+
+/// Rust keywords and reserved words — short-name generation walks a
+/// base-62 counter and can emit things like `as`, `fn`, `if`, `let`,
+/// `Self` which the compiler refuses as identifiers. Both the local
+/// and the item passes skip any candidate in this set.
+fn is_reserved_ident(name: &str) -> bool {
+    matches!(
+        name,
+        // Strict keywords (2015 + 2018 + 2021 edition).
+        "as" | "break" | "const" | "continue" | "crate" | "dyn" | "else"
+        | "enum" | "extern" | "false" | "fn" | "for" | "if" | "impl"
+        | "in" | "let" | "loop" | "match" | "mod" | "move" | "mut"
+        | "pub" | "ref" | "return" | "self" | "Self" | "static"
+        | "struct" | "super" | "trait" | "true" | "type" | "unsafe"
+        | "use" | "where" | "while" | "async" | "await"
+        // Reserved for future use.
+        | "abstract" | "become" | "box" | "do" | "final" | "macro"
+        | "override" | "priv" | "try" | "typeof" | "unsized" | "virtual"
+        | "yield"
+        // Weak keywords that are also unsafe to reuse as a bare ident.
+        | "union"
+    )
+}
 
 /// Generate the `n`-th (1-indexed) short name using `first_alphabet` for
 /// the first character and `REST_ALPHABET` for every character after that.
