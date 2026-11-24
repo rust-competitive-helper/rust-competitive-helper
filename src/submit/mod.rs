@@ -27,7 +27,7 @@ fn extract_site(url: &str) -> String {
             // e.g. "codeforces.com" -> "codeforces", "contest.yandex.com" -> "yandex"
             //      "luogu.com.cn" -> "luogu"
             let tlds = [
-                "com", "org", "net", "co", "ac", "me", "ca", "cn", "ru", "jp", "uz",
+                "com", "org", "net", "co", "ac", "me", "ca", "cn", "ru", "jp", "uz", "kr",
             ];
             let sld = parts
                 .iter()
@@ -51,7 +51,9 @@ pub fn submit() {
     };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
-        | "atcoder" | "luogu" | "kep" | "repovive" | "yosupo" => submitter::submit(&quoted_url),
+        | "atcoder" | "luogu" | "kep" | "repovive" | "yosupo" | "doj" => {
+            submitter::submit(&quoted_url)
+        }
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
         "dmoj" => dmoj::submit(&quoted_url),
         _ => false,
@@ -110,6 +112,7 @@ mod tests {
             extract_site("https://judge.yosupo.jp/problem/aplusb"),
             "yosupo"
         );
+        assert_eq!(extract_site("https://www.doj.kr/problem/123"), "doj");
     }
 
     #[test]

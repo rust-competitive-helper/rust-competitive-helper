@@ -1,3 +1,6 @@
+**2026-11-24** doj.kr submissions are now routed through
+[submitter](https://github.com/EgorKulikov/submitter).
+
 **2026-09-28** The aggregated `main/src/main.rs` now preserves the
 solution's `//` comments and macro-invocation formatting; the library
 sections also preserve them when the task's `build.rs` uses
