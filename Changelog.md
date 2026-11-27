@@ -1,3 +1,6 @@
+**2026-11-27** samcoding.uz submissions are now routed through
+[submitter](https://github.com/EgorKulikov/submitter).
+
 **2026-11-24** doj.kr submissions are now routed through
 [submitter](https://github.com/EgorKulikov/submitter).
 
