@@ -51,7 +51,7 @@ pub fn submit() {
     };
     let submitted = match site.as_str() {
         "codeforces" | "codechef" | "ucup" | "eolymp" | "toph" | "yandex" | "uoj" | "kattis"
-        | "atcoder" | "luogu" | "kep" | "repovive" | "yosupo" | "doj" => {
+        | "atcoder" | "luogu" | "kep" | "repovive" | "yosupo" | "doj" | "samcoding" => {
             submitter::submit(&quoted_url)
         }
         "hackerrank" | "yukicoder" => oj::submit(&quoted_url),
@@ -113,6 +113,10 @@ mod tests {
             "yosupo"
         );
         assert_eq!(extract_site("https://www.doj.kr/problem/123"), "doj");
+        assert_eq!(
+            extract_site("https://samcoding.uz/contest/1/problem/A"),
+            "samcoding"
+        );
     }
 
     #[test]
