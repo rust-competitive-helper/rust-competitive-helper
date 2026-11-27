@@ -532,13 +532,15 @@ impl<FE: FileExplorer> Visitor<FE> {
         // aggregated library keeps its comments and macro whitespace;
         // when minimize=true the code below still goes through
         // unparse+rustminify and produces the current one-liner form.
+        // Minifying also drops doc comments (`#[doc = "..."]`): they don't
+        // change the program and can be most of the library's size.
         let readable_library = !self.minimize;
         for library in self.content.values() {
             println!("cargo:rerun-if-changed=../../{}", library.root.name);
             Self::add_code(&mut library_code, &library.root, readable_library);
         }
         if self.minimize {
-            let file = syn_old::parse_file(&library_code).unwrap();
+            let file = rustminify::remove_docs(syn_old::parse_file(&library_code).unwrap());
             library_code = rustminify::minify_file(&file).to_string();
         }
         code += &library_code;
